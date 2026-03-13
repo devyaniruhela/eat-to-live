@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+.DS_Store
+IFCT2017.pdf
+plan.md
+tasks.md
+fix-progress.md
+design.md
+log.md
+prd-eat-to-live-v1.md
+test-items.md
