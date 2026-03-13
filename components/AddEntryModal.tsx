@@ -106,18 +106,18 @@ export default function AddEntryModal({ onSave, onClose }: AddEntryModalProps) {
   return (
     // Backdrop — tapping outside closes the modal
     <div
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-50 flex items-end justify-center"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Bottom sheet */}
-      <div className="relative w-full bg-white rounded-t-3xl shadow-xl p-6 pb-10 max-h-[90vh] overflow-y-auto z-10">
+      {/* Bottom sheet — constrained to max-w-md, same as all other content in the app */}
+      <div className="relative w-full max-w-md bg-white rounded-t-3xl shadow-xl p-6 pb-10 max-h-[90vh] overflow-y-auto z-10">
         {/* Handle bar */}
         <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-stone-800">Add Entry</h2>
+          <h2 className="text-lg font-semibold text-stone-800">Add what you ate</h2>
           <button
             onClick={onClose}
             className="text-stone-400 hover:text-stone-600 text-2xl leading-none"
@@ -236,7 +236,7 @@ export default function AddEntryModal({ onSave, onClose }: AddEntryModalProps) {
             disabled={!canSave}
             className="flex-1 py-3 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
           >
-            Save Entry
+            Add to plate
           </button>
         </div>
       </div>

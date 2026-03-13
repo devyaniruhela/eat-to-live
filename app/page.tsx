@@ -9,12 +9,15 @@ import DailySummary from '@/components/DailySummary';
 import WhatIAte from '@/components/WhatIAte';
 import WaterLog from '@/components/WaterLog';
 import AddEntryModal from '@/components/AddEntryModal';
+import SearchScreen from '@/components/SearchScreen';
 import {
   getEntriesForDate,
   saveEntry,
   deleteEntry,
+  updateEntry,
   getWaterForDate,
   saveWaterEntry,
+  setWaterForDate,
   toDateString,
   generateId,
 } from '@/lib/storage';
@@ -25,6 +28,7 @@ export default function HomePage() {
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [waterMl, setWaterMl] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   const dateStr = toDateString(currentDate);
   const isToday = dateStr === toDateString(new Date());
@@ -85,6 +89,20 @@ export default function HomePage() {
     loadDayData();
   }
 
+  // Called when user saves an edited quantity for an existing entry
+  function handleUpdateEntry(id: string, newQuantity: number) {
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return;
+    updateEntry({ ...entry, quantity_g: newQuantity });
+    loadDayData();
+  }
+
+  // Called when user edits the water total directly from the summary
+  function handleSetWater(ml: number) {
+    setWaterForDate(dateStr, ml);
+    setWaterMl(ml);
+  }
+
   // Called when user taps a water quick-add button
   function handleAddWater(ml: number) {
     const entry: WaterEntry = {
@@ -101,26 +119,15 @@ export default function HomePage() {
       {/* Header — wordmark with icon */}
       <header className="pt-10 pb-6">
         <div className="flex items-center gap-3">
-          {/* App icon: navy circle, white fork, rose bar chart, dusty-rose leaves */}
-          <svg viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={43} aria-hidden="true">
-            {/* Navy background circle */}
-            <circle cx="20" cy="30" r="17" fill="#1a2744" />
-            {/* Fork tines — three white prongs */}
-            <rect x="12.5" y="15" width="2.5" height="11" rx="1.25" fill="#faf9f6" />
-            <rect x="18.75" y="15" width="2.5" height="11" rx="1.25" fill="#faf9f6" />
-            <rect x="25" y="15" width="2.5" height="11" rx="1.25" fill="#faf9f6" />
-            {/* Fork base connector */}
-            <rect x="14" y="26" width="12" height="2.5" rx="1" fill="#faf9f6" />
-            {/* Fork handle */}
-            <rect x="18" y="28" width="4" height="13" rx="2" fill="#faf9f6" />
-            {/* Bar chart bars on tines — rose accent, varying heights */}
-            <rect x="13.25" y="20" width="1.5" height="6" rx="0.75" fill="#c87080" />
-            <rect x="19.5" y="17" width="1.5" height="9" rx="0.75" fill="#c87080" />
-            <rect x="25.75" y="18.5" width="1.5" height="7.5" rx="0.75" fill="#c87080" />
-            {/* Leaves — dusty rose, curving outward above tines */}
-            <path d="M18 16 C17 12 13 9 15 5 C17 8 18 12 18 16Z" fill="#d4848a" />
-            <path d="M22 16 C23 12 27 9 25 5 C23 8 22 12 22 16Z" fill="#d4848a" />
-          </svg>
+          {/* Navy wrapper + screen blend: black pixels in PNG become navy, white stays white */}
+          <div
+            className="rounded-xl overflow-hidden shrink-0 relative -top-2"
+            style={{ width: 48, height: 48, backgroundColor: 'var(--color-navy)' }}
+            aria-hidden="true"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-icon.png" alt="" width={48} height={48} style={{ mixBlendMode: 'screen', display: 'block' }} />
+          </div>
           <div>
             <h1
               className="text-3xl leading-tight"
@@ -128,7 +135,7 @@ export default function HomePage() {
             >
               Eat to live
             </h1>
-            <p className="text-sm text-stone-400">Personal nutrition journal</p>
+            <p className="text-xs text-stone-400 -mt-1">Personal nutrition journal</p>
           </div>
         </div>
       </header>
@@ -141,22 +148,33 @@ export default function HomePage() {
           date={currentDate}
           onPrevDay={goToPrevDay}
           onNextDay={goToNextDay}
+          onEditWater={handleSetWater}
         />
 
         <WaterLog onAdd={handleAddWater} />
 
-        <WhatIAte entries={entries} onDelete={handleDeleteEntry} isToday={isToday} />
+        <WhatIAte entries={entries} onDelete={handleDeleteEntry} onEdit={handleUpdateEntry} isToday={isToday} />
       </div>
 
-      {/* Sticky bottom action bar */}
+      {/* Sticky bottom action bar — Search (secondary, left) + Add Entry (primary, right) */}
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-4 bg-gradient-to-t from-[#faf9f6] to-transparent">
-        <div className="max-w-md mx-auto">
+        <div className="max-w-md mx-auto flex gap-3">
+          <button
+            onClick={() => setShowSearch(true)}
+            className="flex-1 py-4 rounded-2xl font-semibold text-sm shadow-sm transition-colors border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 active:bg-stone-100 flex items-center justify-center gap-2"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M9 9L12.5 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            Search
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="w-full py-4 rounded-2xl font-semibold text-sm text-white shadow-lg transition-opacity hover:opacity-90 active:opacity-80"
+            className="flex-1 py-4 rounded-2xl font-semibold text-sm text-white shadow-lg transition-opacity hover:opacity-90 active:opacity-80"
             style={{ backgroundColor: 'var(--color-navy)' }}
           >
-            + Add Entry
+            + Add an item
           </button>
         </div>
       </div>
@@ -167,6 +185,11 @@ export default function HomePage() {
           onSave={handleSaveEntry}
           onClose={() => setShowAddModal(false)}
         />
+      )}
+
+      {/* Search / ingredient lookup screen */}
+      {showSearch && (
+        <SearchScreen onClose={() => setShowSearch(false)} />
       )}
     </div>
   );

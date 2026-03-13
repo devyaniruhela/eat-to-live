@@ -3,6 +3,7 @@
 
 'use client';
 
+import { useState } from 'react';
 import { FoodEntry } from '@/lib/types';
 import { sumDayNutrition } from '@/lib/nutrition';
 
@@ -12,6 +13,7 @@ interface DailySummaryProps {
   date: Date;
   onPrevDay: () => void;
   onNextDay: () => void;
+  onEditWater: (ml: number) => void;
 }
 
 export default function DailySummary({
@@ -20,10 +22,31 @@ export default function DailySummary({
   date,
   onPrevDay,
   onNextDay,
+  onEditWater,
 }: DailySummaryProps) {
   const totals = sumDayNutrition(entries);
   const isToday = toDateStr(date) === toDateStr(new Date());
   const isFuture = date > new Date() && !isToday;
+
+  const [editingWater, setEditingWater] = useState(false);
+  const [editWaterValue, setEditWaterValue] = useState('');
+
+  function startWaterEdit() {
+    setEditWaterValue(String(waterMl));
+    setEditingWater(true);
+  }
+
+  function saveWaterEdit() {
+    const ml = Number(editWaterValue);
+    if (!editWaterValue || isNaN(ml) || ml < 0) return;
+    onEditWater(ml);
+    setEditingWater(false);
+  }
+
+  function cancelWaterEdit() {
+    setEditingWater(false);
+    setEditWaterValue('');
+  }
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-5">
@@ -66,11 +89,53 @@ export default function DailySummary({
         </div>
       )}
 
-      {/* Water summary */}
+      {/* Water summary — with inline edit */}
       {waterMl > 0 && (
-        <div className="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between">
+        <div className="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between gap-2">
           <span className="text-sm text-stone-500">Water</span>
-          <span className="text-sm font-semibold text-stone-700">{formatWater(waterMl)}</span>
+          {editingWater ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editWaterValue}
+                onChange={(e) => setEditWaterValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveWaterEdit();
+                  if (e.key === 'Escape') cancelWaterEdit();
+                }}
+                autoFocus
+                className="w-20 px-2 py-1 text-sm border border-stone-300 rounded-lg text-center focus:outline-none focus:border-navy"
+              />
+              <span className="text-xs text-stone-400">ml</span>
+              <button
+                onClick={saveWaterEdit}
+                className="text-xs font-semibold ml-1"
+                style={{ color: 'var(--color-navy)' }}
+              >
+                Save
+              </button>
+              <button
+                onClick={cancelWaterEdit}
+                className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-stone-700">{formatWater(waterMl)}</span>
+              <button
+                onClick={startWaterEdit}
+                className="text-stone-300 hover:text-stone-500 transition-colors"
+                aria-label="Edit water total"
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M9 1.5L11.5 4L4.5 11H2V8.5L9 1.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

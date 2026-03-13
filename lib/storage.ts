@@ -37,6 +37,16 @@ export function deleteEntry(id: string): void {
   localStorage.setItem(ENTRIES_KEY, JSON.stringify(filtered));
 }
 
+/** Updates an existing food entry in place (e.g. quantity change). */
+export function updateEntry(entry: FoodEntry): void {
+  const all = getAllEntries();
+  const idx = all.findIndex((e) => e.id === entry.id);
+  if (idx !== -1) {
+    all[idx] = entry;
+    localStorage.setItem(ENTRIES_KEY, JSON.stringify(all));
+  }
+}
+
 // --- Water Entries ---
 
 /** Returns all water entries across all dates. */
@@ -61,6 +71,18 @@ export function saveWaterEntry(entry: WaterEntry): void {
   const all = getAllWaterEntries();
   all.push(entry);
   localStorage.setItem(WATER_KEY, JSON.stringify(all));
+}
+
+/**
+ * Replaces all water entries for a date with a single entry of the given total.
+ * Used when the user edits the water total directly rather than adding increments.
+ */
+export function setWaterForDate(date: string, ml: number): void {
+  const others = getAllWaterEntries().filter((e) => e.date !== date);
+  if (ml > 0) {
+    others.push({ id: generateId(), date, quantity_ml: ml });
+  }
+  localStorage.setItem(WATER_KEY, JSON.stringify(others));
 }
 
 // --- Utility ---
