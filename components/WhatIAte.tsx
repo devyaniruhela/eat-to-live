@@ -51,10 +51,7 @@ export default function WhatIAte({ entries, onDelete, onEdit, isToday }: WhatIAt
   if (entries.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8 text-center">
-        <p className="text-stone-400 text-sm">
-          {isToday ? 'Nothing logged today.' : 'Nothing logged here.'}
-        </p>
-        <p className="text-stone-300 text-xs mt-1">Start by adding what you ate.</p>
+        <p className="text-stone-400 text-sm">Start by adding what you ate.</p>
       </div>
     );
   }

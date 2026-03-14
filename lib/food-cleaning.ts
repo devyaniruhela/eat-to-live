@@ -197,6 +197,30 @@ function detectCategory(query: string): FoodCategory {
 // Applied to raw USDA results: clean names, filter, re-rank, deduplicate, cap.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Branded fast food and restaurant chain names to discard from USDA results.
+//
+// WHY THIS EXISTS: The USDA API is supposed to return only Foundation and
+// SR Legacy data types when filtered accordingly, but a known inconsistency
+// in the FoodData Central API occasionally leaks Branded Food entries
+// (dataType = "Branded") into results for those categories — particularly
+// for common ingredient names (e.g. "chicken", "rice", "peppers") that
+// happen to also appear in fast food product names. This list is a
+// belt-and-suspenders filter to catch those leakages before they reach the UI.
+//
+// Matching is case-insensitive substring check against the raw USDA description.
+const FAST_FOOD_DISCARD_BRANDS = [
+  "mcdonald's", "mcdonalds", "burger king", "kfc", "wendy's", "wendys",
+  "subway", "taco bell", "chick-fil-a", "chick fil a", "domino's", "dominos",
+  "pizza hut", "denny's", "dennys", "chipotle", "popeyes", "popeye's",
+  "five guys", "in-n-out", "sonic drive", "jack in the box", "panda express",
+  "olive garden", "applebee's", "applebees", "ihop", "hardee's", "hardees",
+  "carl's jr", "carls jr", "dairy queen", "little caesars", "papa john's",
+  "papa johns", "starbucks", "dunkin", "tim hortons", "panera",
+  "chobani",    // yogurt brand — leaks in for dairy searches
+  "yoplait",
+  "fage",
+];
+
 // USDA nutrient IDs for all nutrients we track.
 // Standardised across all FoodData Central entries.
 // Micronutrient units: calcium/iron/magnesium/potassium/zinc/vitamin_c in mg,
@@ -335,6 +359,14 @@ export function processUSDAResults(
 
   return foods
     .map((food) => {
+      // Discard any result whose raw USDA description contains a fast food
+      // brand name — these are Branded Food entries that leaked through the
+      // Foundation/SR Legacy API filter due to a known USDA API inconsistency.
+      const descLower = food.description.toLowerCase();
+      if (FAST_FOOD_DISCARD_BRANDS.some((brand) => descLower.includes(brand))) {
+        return null;
+      }
+
       const name = cleanFoodName(food.description, category);
       if (!name) return null; // null = discard this entry
 
