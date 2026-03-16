@@ -15,6 +15,15 @@ const homemadeApple = Homemade_Apple({
 export const metadata: Metadata = {
   title: 'Eat to Live',
   description: 'Personal nutrition journal',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Eat to Live',
+  },
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {
