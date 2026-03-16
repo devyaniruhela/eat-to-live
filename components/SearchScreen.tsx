@@ -97,10 +97,14 @@ export default function SearchScreen({ onClose, onSave, targetDate }: SearchScre
     searchRef.current?.focus();
   }
 
-  // Called when the user confirms quantity + tag in the AddEntryModal
+  // Called when the user confirms quantity + tag in the AddEntryModal.
+  // Clears search state immediately so the screen is fresh when the toast fades.
   function handleModalSave(food: FoodSearchResult, quantity: number, tag: MealTag | null) {
     onSave(food, quantity, tag);
     setShowAddModal(false);
+    setSelected(null);
+    setQuery('');
+    setResults([]);
     // Show success toast, auto-dismiss after 2.5s
     setSuccessItem(food.name);
     if (successTimer.current) clearTimeout(successTimer.current);

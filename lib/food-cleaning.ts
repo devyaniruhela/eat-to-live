@@ -209,6 +209,7 @@ function detectCategory(query: string): FoodCategory {
 //
 // Matching is case-insensitive substring check against the raw USDA description.
 const FAST_FOOD_DISCARD_BRANDS = [
+  // Fast food chains
   "mcdonald's", "mcdonalds", "burger king", "kfc", "wendy's", "wendys",
   "subway", "taco bell", "chick-fil-a", "chick fil a", "domino's", "dominos",
   "pizza hut", "denny's", "dennys", "chipotle", "popeyes", "popeye's",
@@ -216,9 +217,11 @@ const FAST_FOOD_DISCARD_BRANDS = [
   "olive garden", "applebee's", "applebees", "ihop", "hardee's", "hardees",
   "carl's jr", "carls jr", "dairy queen", "little caesars", "papa john's",
   "papa johns", "starbucks", "dunkin", "tim hortons", "panera",
-  "chobani",    // yogurt brand — leaks in for dairy searches
-  "yoplait",
-  "fage",
+  "arby's", "arbys", "red lobster", "outback", "cracker barrel",
+  "tgi friday", "buffalo wild wings", "waffle house", "el pollo loco",
+  // Dairy / packaged food brands — leak in for dairy/grain searches
+  "chobani", "yoplait", "fage", "dannon", "stonyfield", "oikos",
+  "quaker",   // oat brand — leaks in for oat/grain searches
 ];
 
 // USDA nutrient IDs for all nutrients we track.
