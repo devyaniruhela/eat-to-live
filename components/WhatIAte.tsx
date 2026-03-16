@@ -1,6 +1,7 @@
 // Displays all food entries for the day, grouped by meal tag.
 // Order is always: Breakfast → Lunch → Snack → Dinner → Untagged
 // Each entry has an inline edit (quantity) and delete action.
+// Swiping left on a row deletes it — same as tapping the × button.
 
 'use client';
 
@@ -8,6 +9,7 @@ import { useState } from 'react';
 import { FoodEntry, MealTag } from '@/lib/types';
 import { calculateNutrition } from '@/lib/nutrition';
 import EmptyStatePrompt from '@/components/EmptyStatePrompt';
+import { useSwipe } from '@/lib/useSwipe';
 
 interface WhatIAteProps {
   entries: FoodEntry[];
@@ -28,6 +30,97 @@ function PencilIcon() {
   );
 }
 
+// ── EntryRow ─────────────────────────────────────────────────────────────────
+// Extracted so useSwipe can be called at the component level (hooks can't go
+// inside .map()). stopPropagation: true prevents the row swipe from bubbling
+// to the page-level date-swipe handler.
+
+interface EntryRowProps {
+  entry: FoodEntry;
+  isEditing: boolean;
+  editQty: string;
+  onEditQtyChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onStartEdit: () => void;
+  onDelete: () => void;
+}
+
+function EntryRow({
+  entry, isEditing, editQty, onEditQtyChange, onSave, onCancel, onStartEdit, onDelete,
+}: EntryRowProps) {
+  const swipeHandlers = useSwipe({ onSwipeLeft: onDelete, stopPropagation: true });
+  const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
+
+  return (
+    <div key={entry.id} className="py-2 border-b border-stone-50 last:border-0" {...swipeHandlers}>
+      {isEditing ? (
+        // ── Edit state ──────────────────────────────────────────────────────
+        <div>
+          <p className="text-sm font-medium text-stone-800 capitalize mb-2">
+            {entry.ingredientName.toLowerCase()}
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              inputMode="decimal"
+              value={editQty}
+              onChange={(e) => onEditQtyChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSave();
+                if (e.key === 'Escape') onCancel();
+              }}
+              autoFocus
+              className="w-16 px-2 py-1 text-sm border border-stone-300 rounded-lg text-center focus:outline-none focus:border-navy"
+            />
+            <span className="text-xs text-stone-400">g</span>
+            <button
+              onClick={onSave}
+              className="text-xs font-semibold ml-1"
+              style={{ color: 'var(--color-navy)' }}
+            >
+              Save
+            </button>
+            <button onClick={onCancel} className="text-xs text-stone-400 hover:text-stone-600 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        // ── Normal state ────────────────────────────────────────────────────
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-stone-800 truncate capitalize">
+                {entry.ingredientName.toLowerCase()}
+              </p>
+              <button
+                onClick={onStartEdit}
+                className="text-stone-300 hover:text-stone-500 transition-colors shrink-0"
+                aria-label={`Edit ${entry.ingredientName}`}
+              >
+                <PencilIcon />
+              </button>
+            </div>
+            <p className="text-xs text-stone-400 mt-0.5">
+              {entry.quantity_g}g &middot; {actual.calories} kcal &middot; {actual.protein}g protein
+            </p>
+          </div>
+          <button
+            onClick={onDelete}
+            className="text-stone-300 hover:text-rose-400 transition-colors text-sm leading-none mt-0.5 shrink-0"
+            aria-label={`Remove ${entry.ingredientName}`}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── WhatIAte ─────────────────────────────────────────────────────────────────
+
 export default function WhatIAte({ entries, onDelete, onEdit, isToday, onAddItem }: WhatIAteProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState('');
@@ -37,7 +130,7 @@ export default function WhatIAte({ entries, onDelete, onEdit, isToday, onAddItem
     setEditQty(String(entry.quantity_g));
   }
 
-  function CancelEdit() {
+  function cancelEdit() {
     setEditingId(null);
     setEditQty('');
   }
@@ -76,83 +169,19 @@ export default function WhatIAte({ entries, onDelete, onEdit, isToday, onAddItem
           </p>
 
           <div className="space-y-2">
-            {items.map((entry) => {
-              const isEditing = editingId === entry.id;
-              const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
-
-              return (
-                <div key={entry.id} className="py-2 border-b border-stone-50 last:border-0">
-                  {isEditing ? (
-                    // ── Edit state ─────────────────────────────────────────
-                    <div>
-                      {/* Food name stays visible */}
-                      <p className="text-sm font-medium text-stone-800 capitalize mb-2">
-                        {entry.ingredientName.toLowerCase()}
-                      </p>
-                      {/* Quantity input + text actions on one line */}
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          value={editQty}
-                          onChange={(e) => setEditQty(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveEdit(entry.id);
-                            if (e.key === 'Escape') CancelEdit();
-                          }}
-                          autoFocus
-                          className="w-16 px-2 py-1 text-sm border border-stone-300 rounded-lg text-center focus:outline-none focus:border-navy"
-                        />
-                        <span className="text-xs text-stone-400">g</span>
-                        <button
-                          onClick={() => saveEdit(entry.id)}
-                          className="text-xs font-semibold ml-1"
-                          style={{ color: 'var(--color-navy)' }}
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={CancelEdit}
-                          className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    // ── Normal state ────────────────────────────────────────
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        {/* Name + pencil inline */}
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-medium text-stone-800 truncate capitalize">
-                            {entry.ingredientName.toLowerCase()}
-                          </p>
-                          <button
-                            onClick={() => startEdit(entry)}
-                            className="text-stone-300 hover:text-stone-500 transition-colors shrink-0"
-                            aria-label={`Edit ${entry.ingredientName}`}
-                          >
-                            <PencilIcon />
-                          </button>
-                        </div>
-                        <p className="text-xs text-stone-400 mt-0.5">
-                          {entry.quantity_g}g &middot; {actual.calories} kcal &middot; {actual.protein}g protein
-                        </p>
-                      </div>
-                      {/* Delete */}
-                      <button
-                        onClick={() => onDelete(entry.id)}
-                        className="text-stone-300 hover:text-rose-400 transition-colors text-sm leading-none mt-0.5 shrink-0"
-                        aria-label={`Remove ${entry.ingredientName}`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {items.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                isEditing={editingId === entry.id}
+                editQty={editQty}
+                onEditQtyChange={setEditQty}
+                onSave={() => saveEdit(entry.id)}
+                onCancel={cancelEdit}
+                onStartEdit={() => startEdit(entry)}
+                onDelete={() => onDelete(entry.id)}
+              />
+            ))}
           </div>
         </div>
       ))}

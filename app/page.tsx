@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSwipe } from '@/lib/useSwipe';
 import DailySummary from '@/components/DailySummary';
 import WhatIAte from '@/components/WhatIAte';
 import WaterLog from '@/components/WaterLog';
@@ -114,8 +115,11 @@ export default function HomePage() {
     setWaterMl((prev) => prev + ml);
   }
 
+  // Swipe left = next day, swipe right = prev day — same as the arrow buttons
+  const swipeHandlers = useSwipe({ onSwipeLeft: goToNextDay, onSwipeRight: goToPrevDay });
+
   return (
-    <div className="max-w-md mx-auto px-4 pb-24">
+    <div className="max-w-md mx-auto px-4 pb-24" {...swipeHandlers}>
       {/* Header — wordmark with icon */}
       <header className="pt-10 pb-6">
         <div className="flex items-center gap-3">

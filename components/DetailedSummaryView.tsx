@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, useEffect, Fragment } from 'react';
+import { useSwipe } from '@/lib/useSwipe';
 import { useRouter } from 'next/navigation';
 import WeeklyInsights from '@/components/WeeklyInsights';
 import AddEntryModal from '@/components/AddEntryModal';
@@ -119,9 +120,12 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
   }
 
 
+  // Swipe left = next day, swipe right = prev day — same as the arrow buttons
+  const swipeHandlers = useSwipe({ onSwipeLeft: goToNext, onSwipeRight: goToPrev });
+
   return (
     <Fragment>
-    <div className="max-w-md mx-auto px-4 pb-28">
+    <div className="max-w-md mx-auto px-4 pb-28" {...swipeHandlers}>
       {/* Back navigation */}
       <div className="pt-10 pb-4">
         <button
