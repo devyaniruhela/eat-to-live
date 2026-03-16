@@ -15,7 +15,7 @@ const WATER_OPTIONS = [
 
 export default function WaterLog({ onAdd }: WaterLogProps) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-5">
+    <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-5">
       <p className="text-xs text-stone-400 uppercase tracking-widest font-medium mb-3">
         Water
       </p>

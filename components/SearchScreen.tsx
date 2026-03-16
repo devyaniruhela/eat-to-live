@@ -6,24 +6,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FoodSearchResult, NutritionPer100g } from '@/lib/types';
+import { FoodSearchResult } from '@/lib/types';
+import { MICRONUTRIENT_LABELS } from '@/lib/nutrition';
 
 interface SearchScreenProps {
   onClose: () => void;
 }
-
-// Micronutrients to display, in order, with display label and unit
-const MICRONUTRIENTS: { key: keyof NutritionPer100g; label: string; unit: string }[] = [
-  { key: 'calcium',     label: 'Calcium',     unit: 'mg'  },
-  { key: 'iron',        label: 'Iron',         unit: 'mg'  },
-  { key: 'magnesium',   label: 'Magnesium',    unit: 'mg'  },
-  { key: 'potassium',   label: 'Potassium',    unit: 'mg'  },
-  { key: 'zinc',        label: 'Zinc',         unit: 'mg'  },
-  { key: 'vitamin_a',   label: 'Vitamin A',    unit: 'mcg' },
-  { key: 'vitamin_b12', label: 'Vitamin B12',  unit: 'mcg' },
-  { key: 'vitamin_c',   label: 'Vitamin C',    unit: 'mg'  },
-  { key: 'vitamin_d',   label: 'Vitamin D',    unit: 'mcg' },
-];
 
 export default function SearchScreen({ onClose }: SearchScreenProps) {
   const [query, setQuery] = useState('');
@@ -96,7 +84,7 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center" style={{ backgroundColor: 'var(--color-background)' }}>
+    <div className="fixed inset-0 z-50 flex flex-col items-center" style={{ backgroundColor: 'var(--color-card)' }}>
       {/* Content constrained to max-w-md — same as the rest of the app */}
       <div className="w-full max-w-md flex flex-col h-full">
 
@@ -126,7 +114,7 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
               setQuery(e.target.value);
               if (!e.target.value) setSelected(null);
             }}
-            className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-white text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:border-navy"
+            className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-card text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:border-navy"
             style={{ '--tw-ring-color': 'rgba(26,39,68,0.2)' } as React.CSSProperties}
           />
           {loading && (
@@ -148,7 +136,7 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
 
         {/* Search results dropdown */}
         {results.length > 0 && (
-          <div className="border border-stone-200 rounded-xl overflow-hidden mb-6 divide-y divide-stone-100 bg-white">
+          <div className="border border-stone-200 rounded-xl overflow-hidden mb-6 divide-y divide-stone-100 bg-card">
             {results.map((food) => (
               <button
                 key={food.fdcId}
@@ -189,8 +177,8 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
             <p className="text-xs text-stone-400 uppercase tracking-widest font-medium mb-3">
               Micronutrients
             </p>
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
-              {MICRONUTRIENTS.map((m) => (
+            <div className="bg-card rounded-2xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
+              {MICRONUTRIENT_LABELS.map((m) => (
                 <div key={m.key} className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-stone-700">{m.label}</span>
                   <span className="text-sm font-semibold text-stone-800">
@@ -231,7 +219,7 @@ function MacroCard({
 }) {
   return (
     <div className={`rounded-xl p-3 ${highlight ? 'text-white' : 'bg-stone-50'}`}
-      style={highlight ? { backgroundColor: 'var(--color-navy)' } : undefined}
+      style={highlight ? { backgroundColor: 'var(--color-navy-mid)' } : undefined}
     >
       <p className={`text-xs uppercase tracking-widest font-medium mb-1 ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>
         {label}

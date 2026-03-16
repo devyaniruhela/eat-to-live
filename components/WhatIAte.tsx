@@ -7,12 +7,14 @@
 import { useState } from 'react';
 import { FoodEntry, MealTag } from '@/lib/types';
 import { calculateNutrition } from '@/lib/nutrition';
+import EmptyStatePrompt from '@/components/EmptyStatePrompt';
 
 interface WhatIAteProps {
   entries: FoodEntry[];
   onDelete: (id: string) => void;
   onEdit: (id: string, newQuantity: number) => void;
   isToday: boolean;
+  onAddItem: () => void;
 }
 
 const MEAL_ORDER: (MealTag | null)[] = ['Breakfast', 'Lunch', 'Snack', 'Dinner', null];
@@ -26,7 +28,7 @@ function PencilIcon() {
   );
 }
 
-export default function WhatIAte({ entries, onDelete, onEdit, isToday }: WhatIAteProps) {
+export default function WhatIAte({ entries, onDelete, onEdit, isToday, onAddItem }: WhatIAteProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState('');
 
@@ -50,8 +52,8 @@ export default function WhatIAte({ entries, onDelete, onEdit, isToday }: WhatIAt
 
   if (entries.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8 text-center">
-        <p className="text-stone-400 text-sm">Start by adding what you ate.</p>
+      <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-8 text-center">
+        <EmptyStatePrompt label="Start by adding what you ate" onTap={onAddItem} />
       </div>
     );
   }
@@ -62,7 +64,7 @@ export default function WhatIAte({ entries, onDelete, onEdit, isToday }: WhatIAt
   })).filter((group) => group.items.length > 0);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-5 space-y-5">
+    <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-5 space-y-5">
       <p className="text-xs text-stone-400 uppercase tracking-widest font-medium">
         What I Ate
       </p>

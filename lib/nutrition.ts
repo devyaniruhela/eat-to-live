@@ -74,3 +74,75 @@ export function sumDayNutrition(entries: FoodEntry[]): NutritionPer100g {
 function round(n: number): number {
   return Math.round(n * 10) / 10;
 }
+
+// ---------------------------------------------------------------------------
+// Micronutrient display metadata
+// ---------------------------------------------------------------------------
+
+/**
+ * Ordered list of all micronutrients tracked by the app.
+ * Single source of truth for labels, keys, and units used in any UI display.
+ * Order: minerals first (alphabetical), then vitamins (alphabetical).
+ */
+export const MICRONUTRIENT_LABELS: ReadonlyArray<{
+  key: keyof NutritionPer100g;
+  label: string;
+  unit: string;
+}> = [
+  { key: 'calcium',     label: 'Calcium',     unit: 'mg'  },
+  { key: 'iron',        label: 'Iron',        unit: 'mg'  },
+  { key: 'magnesium',   label: 'Magnesium',   unit: 'mg'  },
+  { key: 'potassium',   label: 'Potassium',   unit: 'mg'  },
+  { key: 'zinc',        label: 'Zinc',        unit: 'mg'  },
+  { key: 'vitamin_a',   label: 'Vitamin A',   unit: 'mcg' },
+  { key: 'vitamin_b12', label: 'Vitamin B12', unit: 'mcg' },
+  { key: 'vitamin_c',   label: 'Vitamin C',   unit: 'mg'  },
+  // Vitamin D intentionally excluded — not meaningfully present in food sources
+];
+
+// ---------------------------------------------------------------------------
+// 7-day aggregate
+// ---------------------------------------------------------------------------
+
+export interface WeeklyAggregate {
+  allDaysPresent: boolean;    // true only when all 7 days have at least 1 entry
+  avgCalories: number;
+  avgProtein: number;
+  avgWaterL: number;          // average daily water in litres
+  missingNutrients: string[]; // display labels of micronutrients where 7-day sum = 0
+}
+
+/**
+ * Computes weekly stats from 7 pre-summed daily nutrition totals.
+ * Averages and missing-nutrient detection are only meaningful (and only returned)
+ * when every day in the window has at least one logged entry.
+ *
+ * @param dayData  Exactly 7 items, one per day, oldest first
+ */
+export function compute7DayAggregate(
+  dayData: ReadonlyArray<{ totals: NutritionPer100g; hasEntries: boolean; waterMl: number }>
+): WeeklyAggregate {
+  const allDaysPresent = dayData.length === 7 && dayData.every((d) => d.hasEntries);
+
+  if (!allDaysPresent) {
+    return { allDaysPresent: false, avgCalories: 0, avgProtein: 0, avgWaterL: 0, missingNutrients: [] };
+  }
+
+  const totalCalories = dayData.reduce((s, d) => s + d.totals.calories, 0);
+  const totalProtein  = dayData.reduce((s, d) => s + d.totals.protein, 0);
+  const totalWaterMl  = dayData.reduce((s, d) => s + d.waterMl, 0);
+
+  // A nutrient is "missing" when its sum across all 7 days is zero.
+  // This means none of the logged foods contributed any value for that nutrient.
+  const missingNutrients = MICRONUTRIENT_LABELS
+    .filter(({ key }) => dayData.reduce((s, d) => s + (d.totals[key] as number), 0) === 0)
+    .map(({ label }) => label);
+
+  return {
+    allDaysPresent: true,
+    avgCalories: Math.round(totalCalories / 7),
+    avgProtein:  Math.round((totalProtein / 7) * 10) / 10,
+    avgWaterL:   Math.round((totalWaterMl / 7 / 1000) * 10) / 10,
+    missingNutrients,
+  };
+}

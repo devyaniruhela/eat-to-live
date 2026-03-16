@@ -153,15 +153,15 @@ export default function HomePage() {
 
         <WaterLog onAdd={handleAddWater} />
 
-        <WhatIAte entries={entries} onDelete={handleDeleteEntry} onEdit={handleUpdateEntry} isToday={isToday} />
+        <WhatIAte entries={entries} onDelete={handleDeleteEntry} onEdit={handleUpdateEntry} isToday={isToday} onAddItem={() => setShowAddModal(true)} />
       </div>
 
       {/* Sticky bottom action bar — Search (secondary, left) + Add Entry (primary, right) */}
-      <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-4 bg-gradient-to-t from-[#faf9f6] to-transparent">
+      <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-4 bg-gradient-to-t from-[var(--color-background)] to-transparent">
         <div className="max-w-md mx-auto flex gap-3">
           <button
             onClick={() => setShowSearch(true)}
-            className="flex-1 py-4 rounded-2xl font-semibold text-sm shadow-sm transition-colors border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 active:bg-stone-100 flex items-center justify-center gap-2"
+            className="flex-1 py-4 rounded-2xl font-semibold text-sm shadow-sm transition-colors border border-stone-200 bg-card text-stone-700 hover:bg-stone-50 active:bg-stone-100 flex items-center justify-center gap-2"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.5" />

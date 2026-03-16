@@ -112,7 +112,7 @@ export default function AddEntryModal({ onSave, onClose }: AddEntryModalProps) {
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
       {/* Bottom sheet — constrained to max-w-md, same as all other content in the app */}
-      <div className="relative w-full max-w-md bg-white rounded-t-3xl shadow-xl p-6 pb-10 max-h-[90vh] overflow-y-auto z-10">
+      <div className="relative w-full max-w-md bg-card rounded-t-3xl shadow-xl p-6 pb-10 max-h-[90vh] overflow-y-auto z-10">
         {/* Handle bar */}
         <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-5" />
 
@@ -213,7 +213,7 @@ export default function AddEntryModal({ onSave, onClose }: AddEntryModalProps) {
                   className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                     tag === t
                       ? 'bg-navy text-white border-navy'
-                      : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
+                      : 'bg-card text-stone-600 border-stone-200 hover:border-stone-300'
                   }`}
                 >
                   {t}

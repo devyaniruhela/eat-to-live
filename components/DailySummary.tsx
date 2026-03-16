@@ -4,6 +4,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { FoodEntry } from '@/lib/types';
 import { sumDayNutrition } from '@/lib/nutrition';
 
@@ -49,7 +50,7 @@ export default function DailySummary({
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-5">
+    <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-5">
       {/* Date navigation */}
       <div className="flex items-center justify-between mb-5">
         <button
@@ -88,6 +89,16 @@ export default function DailySummary({
           <MacroCard label="Fiber" value={totals.fiber} unit="g" />
         </div>
       )}
+
+      {/* Tertiary CTA — sits between macros and water, right-aligned */}
+      <div className="flex justify-end mt-2">
+        <Link
+          href={`/detailed-summary?date=${toDateStr(date)}`}
+          className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
+        >
+          Detailed summary →
+        </Link>
+      </div>
 
       {/* Water summary — with inline edit */}
       {waterMl > 0 && (
@@ -155,7 +166,10 @@ function MacroCard({
   highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-xl p-3 ${highlight ? 'bg-navy text-white' : 'bg-stone-50 text-stone-800'}`}>
+    <div
+      className={`rounded-xl p-3 ${highlight ? 'text-white' : 'bg-stone-50 text-stone-800'}`}
+      style={highlight ? { backgroundColor: 'var(--color-navy-mid)' } : undefined}
+    >
       <p className={`text-xs uppercase tracking-widest font-medium mb-1 ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>
         {label}
       </p>
@@ -169,8 +183,13 @@ function MacroCard({
 
 // --- Helpers ---
 
-function toDateStr(d: Date) {
-  return d.toISOString().split('T')[0];
+// Uses local time components (not toISOString) to avoid date shifting for IST and other UTC+ zones.
+// toISOString() returns UTC, which can be a different calendar date from the user's local date.
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function formatDate(d: Date): string {
