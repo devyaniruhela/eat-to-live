@@ -10,29 +10,36 @@ import { calculateNutrition } from '@/lib/nutrition';
 interface AddEntryModalProps {
   onSave: (result: FoodSearchResult, quantity: number, tag: MealTag | null) => void;
   onClose: () => void;
+  // When provided, skip the search step and open directly at quantity input
+  initialFood?: FoodSearchResult;
 }
 
 const MEAL_TAGS: MealTag[] = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 
-export default function AddEntryModal({ onSave, onClose }: AddEntryModalProps) {
-  const [query, setQuery] = useState('');
+export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntryModalProps) {
+  const [query, setQuery] = useState(initialFood?.name ?? '');
   const [results, setResults] = useState<FoodSearchResult[]>([]);
-  const [selected, setSelected] = useState<FoodSearchResult | null>(null);
+  const [selected, setSelected] = useState<FoodSearchResult | null>(initialFood ?? null);
   const [quantity, setQuantity] = useState('');
   const [tag, setTag] = useState<MealTag | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
+  const quantityRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // In-memory cache: stores results for queries already fetched this session.
   // Key = lowercased query string, Value = results array.
   // This makes repeated or similar searches instant without hitting the API again.
   const cache = useRef<Map<string, FoodSearchResult[]>>(new Map());
 
-  // Auto-focus the search input when modal opens
+  // Auto-focus: quantity input when food is pre-selected, otherwise search input
   useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
+    if (initialFood) {
+      quantityRef.current?.focus();
+    } else {
+      searchRef.current?.focus();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounce search — wait 350ms after typing stops before calling the API.
   // If the query matches the already-selected food's name, skip searching —
@@ -171,6 +178,7 @@ export default function AddEntryModal({ onSave, onClose }: AddEntryModalProps) {
               Quantity (grams)
             </label>
             <input
+              ref={quantityRef}
               type="number"
               placeholder="e.g. 100"
               value={quantity}

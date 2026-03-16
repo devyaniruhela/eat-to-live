@@ -4,11 +4,12 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import WeeklyInsights from '@/components/WeeklyInsights';
 import AddEntryModal from '@/components/AddEntryModal';
 import SearchScreen from '@/components/SearchScreen';
+import SuccessToast from '@/components/SuccessToast';
 import EmptyStatePrompt from '@/components/EmptyStatePrompt';
 import { FoodEntry, FoodSearchResult, MealTag, NutritionPer100g } from '@/lib/types';
 import {
@@ -47,6 +48,8 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
   const [showSearch, setShowSearch]     = useState(false);
   // Incrementing refreshKey forces a data reload after an entry is saved
   const [refreshKey, setRefreshKey]     = useState(0);
+  // Item name shown in success toast; null = hidden
+  const [successItem, setSuccessItem]   = useState<string | null>(null);
 
   const dateStr  = toDateString(currentDate);
   const isToday  = dateStr === toDateString(new Date());
@@ -92,6 +95,13 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     });
   }
 
+  // Auto-dismiss success toast after 2.5s
+  useEffect(() => {
+    if (!successItem) return;
+    const t = setTimeout(() => setSuccessItem(null), 2500);
+    return () => clearTimeout(t);
+  }, [successItem]);
+
   // Saves the entry to the date currently displayed, then reloads
   function handleSaveEntry(food: FoodSearchResult, quantity: number, tag: MealTag | null) {
     const entry: FoodEntry = {
@@ -105,9 +115,12 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     saveEntry(entry);
     setShowAddModal(false);
     setRefreshKey((k) => k + 1);
+    setSuccessItem(food.name);
   }
 
+
   return (
+    <Fragment>
     <div className="max-w-md mx-auto px-4 pb-28">
       {/* Back navigation */}
       <div className="pt-10 pb-4">
@@ -217,9 +230,18 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
         <AddEntryModal onSave={handleSaveEntry} onClose={() => setShowAddModal(false)} />
       )}
       {showSearch && (
-        <SearchScreen onClose={() => setShowSearch(false)} />
+        <SearchScreen
+          onClose={() => setShowSearch(false)}
+          onSave={handleSaveEntry}
+          targetDate={dateStr}
+        />
       )}
+
     </div>
+
+    {/* Success toast — rendered outside the page div to avoid any stacking context */}
+    {successItem && <SuccessToast itemName={successItem} targetDate={dateStr} />}
+    </Fragment>
   );
 }
 

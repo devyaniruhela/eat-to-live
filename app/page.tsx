@@ -189,7 +189,11 @@ export default function HomePage() {
 
       {/* Search / ingredient lookup screen */}
       {showSearch && (
-        <SearchScreen onClose={() => setShowSearch(false)} />
+        <SearchScreen
+          onClose={() => setShowSearch(false)}
+          onSave={handleSaveEntry}
+          targetDate={dateStr}
+        />
       )}
     </div>
   );

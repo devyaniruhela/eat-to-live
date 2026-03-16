@@ -1,33 +1,47 @@
 // Ingredient lookup screen — search for a food and see its full nutrition breakdown.
 // Shows macros (per 100g) in cards, followed by all tracked micronutrients as a list.
 // Accessed via the Search button in the bottom action bar.
-// Read-only — no logging from this screen. Future: "Add to today" CTA.
+// "Add to plate" CTA logs the selected food to today's plate without leaving this screen.
 
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FoodSearchResult } from '@/lib/types';
+import { FoodSearchResult, MealTag } from '@/lib/types';
 import { MICRONUTRIENT_LABELS } from '@/lib/nutrition';
+import AddEntryModal from '@/components/AddEntryModal';
+import SuccessToast from '@/components/SuccessToast';
 
 interface SearchScreenProps {
   onClose: () => void;
+  onSave: (food: FoodSearchResult, quantity: number, tag: MealTag | null) => void;
+  // The date currently being viewed — Add to plate saves to this date
+  targetDate: string;
 }
 
-export default function SearchScreen({ onClose }: SearchScreenProps) {
+export default function SearchScreen({ onClose, onSave, targetDate }: SearchScreenProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selected, setSelected] = useState<FoodSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  // Holds the item name shown in the success toast; null = toast hidden
+  const [successItem, setSuccessItem] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // In-memory cache: same pattern as AddEntryModal — avoids re-fetching within a session
   const cache = useRef<Map<string, FoodSearchResult[]>>(new Map());
 
   // Auto-focus search input on open
   useEffect(() => {
     searchRef.current?.focus();
+  }, []);
+
+  // Clean up success timer on unmount
+  useEffect(() => {
+    return () => { if (successTimer.current) clearTimeout(successTimer.current); };
   }, []);
 
   // Debounced search — 350ms after typing stops, same as AddEntryModal
@@ -81,6 +95,16 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
     setQuery('');
     setResults([]);
     searchRef.current?.focus();
+  }
+
+  // Called when the user confirms quantity + tag in the AddEntryModal
+  function handleModalSave(food: FoodSearchResult, quantity: number, tag: MealTag | null) {
+    onSave(food, quantity, tag);
+    setShowAddModal(false);
+    // Show success toast, auto-dismiss after 2.5s
+    setSuccessItem(food.name);
+    if (successTimer.current) clearTimeout(successTimer.current);
+    successTimer.current = setTimeout(() => setSuccessItem(null), 2500);
   }
 
   return (
@@ -153,12 +177,24 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
         {/* Nutrition breakdown — shown once a food is selected */}
         {selected && (
           <div>
-            {/* Food name + per 100g label */}
-            <div className="mb-5">
-              <h2 className="text-lg font-semibold text-stone-800 capitalize">
-                {selected.name.toLowerCase()}
-              </h2>
-              <p className="text-xs text-stone-400 mt-0.5">Per 100g</p>
+            {/* Food name + per 100g label + Add to plate CTA */}
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-lg font-semibold text-stone-800 capitalize">
+                  {selected.name.toLowerCase()}
+                </h2>
+                <p className="text-xs text-stone-400 mt-0.5">Per 100g</p>
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border shrink-0 transition-opacity hover:opacity-70"
+                style={{ color: 'var(--color-navy)', borderColor: 'var(--color-navy)' }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                  <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                Add to plate
+              </button>
             </div>
 
             {/* Macronutrients */}
@@ -204,6 +240,18 @@ export default function SearchScreen({ onClose }: SearchScreenProps) {
 
       </div>
       </div>{/* end max-w-md */}
+
+      {/* Add Entry modal — opens on top of this screen with the food pre-selected */}
+      {showAddModal && selected && (
+        <AddEntryModal
+          initialFood={selected}
+          onSave={handleModalSave}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* Success toast — appears after saving, auto-dismisses after 2.5s */}
+      {successItem && <SuccessToast itemName={successItem} targetDate={targetDate} />}
     </div>
   );
 }
