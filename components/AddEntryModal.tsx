@@ -1,11 +1,13 @@
 // The Add Entry flow — a bottom sheet modal with 4 steps:
 // 1. Search for a food  2. See nutrition preview  3. Enter quantity  4. Pick a meal tag → Save
+// The nutrition preview step includes an expandable micronutrient detail section.
 
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { FoodSearchResult, MealTag } from '@/lib/types';
-import { calculateNutrition } from '@/lib/nutrition';
+import { calculateNutrition, MICRONUTRIENT_LABELS } from '@/lib/nutrition';
+import { getRecentFoods } from '@/lib/storage';
 
 interface AddEntryModalProps {
   onSave: (result: FoodSearchResult, quantity: number, tag: MealTag | null) => void;
@@ -24,6 +26,11 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
   const [tag, setTag] = useState<MealTag | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showMicros, setShowMicros] = useState(false);
+  // Loaded once on mount — top 5 foods from the last 3 days
+  const [recentFoods] = useState<FoodSearchResult[]>(() =>
+    initialFood ? [] : getRecentFoods(5, 3)
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const quantityRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,6 +103,7 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
     setSelected(food);
     setResults([]);
     setQuery(food.name);
+    setShowMicros(false); // reset detail panel when a new food is picked
   }
 
   function handleSave() {
@@ -118,135 +126,202 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Bottom sheet — constrained to max-w-md, same as all other content in the app */}
-      <div className="relative w-full max-w-md bg-card rounded-t-3xl shadow-xl p-6 pb-10 max-h-[90vh] overflow-y-auto z-10">
-        {/* Handle bar */}
-        <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-5" />
+      {/* Bottom sheet — flex column so the footer can be pinned while content scrolls */}
+      <div className="relative w-full max-w-md bg-card rounded-t-3xl shadow-xl max-h-[90vh] flex flex-col z-10">
 
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-stone-800">Add what you ate</h2>
-          <button
-            onClick={onClose}
-            className="text-stone-400 hover:text-stone-600 text-2xl leading-none"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
+        {/* Scrollable content area */}
+        <div className="overflow-y-auto flex-1 p-6">
+          {/* Handle bar */}
+          <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-5" />
 
-        {/* Search input */}
-        <div className="relative mb-4">
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder="Search for a food..."
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              if (!e.target.value) setSelected(null);
-            }}
-            className="w-full px-4 py-3 rounded-xl border border-stone-200 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
-          />
-          {loading && (
-            <span className="absolute right-3 top-3.5 text-xs text-stone-400">Searching...</span>
-          )}
-        </div>
-
-        {/* Search error */}
-        {error && <p className="text-xs text-rose-500 mb-3">{error}</p>}
-
-        {/* Search results dropdown */}
-        {results.length > 0 && (
-          <div className="border border-stone-200 rounded-xl overflow-hidden mb-4 divide-y divide-stone-100">
-            {results.map((food) => (
-              <button
-                key={food.fdcId}
-                onClick={() => handleSelect(food)}
-                className="w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex items-center justify-between gap-3"
-              >
-                <p className="text-sm font-medium text-stone-800">{food.name}</p>
-                <p className="text-xs text-stone-400 shrink-0">{food.nutrition.calories} kcal</p>
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg font-semibold text-stone-800">Add what you ate</h2>
+            <button
+              onClick={onClose}
+              className="text-stone-400 hover:text-stone-600 text-2xl leading-none"
+              aria-label="Close"
+            >
+              ×
+            </button>
           </div>
-        )}
 
-        {/* Quantity input — only shown after selecting a food */}
-        {selected && (
-          <div className="mb-4">
-            <label className="block text-xs text-stone-500 font-medium mb-1.5 uppercase tracking-wider">
-              Quantity (grams)
-            </label>
+          {/* Search input */}
+          <div className="relative mb-4">
             <input
-              ref={quantityRef}
-              type="number"
-              placeholder="e.g. 100"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              inputMode="decimal"
+              ref={searchRef}
+              type="text"
+              placeholder="Search for a food..."
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (!e.target.value) setSelected(null);
+              }}
               className="w-full px-4 py-3 rounded-xl border border-stone-200 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
             />
+            {loading && (
+              <span className="absolute right-3 top-3.5 text-xs text-stone-400">Searching...</span>
+            )}
           </div>
-        )}
 
-        {/* Nutrition preview — shown when food + quantity are entered */}
-        {preview && (
-          <div className="bg-stone-50 rounded-xl p-4 mb-4 grid grid-cols-4 gap-2">
-            {[
-              { label: 'Calories', value: preview.calories, unit: 'kcal' },
-              { label: 'Protein', value: preview.protein, unit: 'g' },
-              { label: 'Fat', value: preview.fat, unit: 'g' },
-              { label: 'Fiber', value: preview.fiber, unit: 'g' },
-            ].map((m) => (
-              <div key={m.label} className="text-center">
-                <p className="text-xs text-stone-400 mb-0.5">{m.label}</p>
-                <p className="text-sm font-bold text-stone-800">{m.value}</p>
-                <p className="text-xs text-stone-400">{m.unit}</p>
+          {/* Quick add pills — shown only when search is empty and no food selected yet */}
+          {!selected && !query && recentFoods.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-stone-400 font-medium uppercase tracking-wider mb-2">
+                Quick add
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {recentFoods.map((food) => (
+                  <button
+                    key={food.name}
+                    onClick={() => handleSelect(food)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium border border-stone-200 bg-card text-stone-600 hover:border-stone-300 transition-colors"
+                  >
+                    <span className="text-stone-400">+</span>
+                    {food.name}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* Meal tag selector */}
-        {selected && (
-          <div className="mb-6">
-            <p className="text-xs text-stone-500 font-medium mb-2 uppercase tracking-wider">
-              Meal (optional)
-            </p>
-            <div className="flex gap-2 flex-wrap">
-              {MEAL_TAGS.map((t) => (
+          {/* Search error */}
+          {error && <p className="text-xs text-rose-500 mb-3">{error}</p>}
+
+          {/* Search results dropdown */}
+          {results.length > 0 && (
+            <div className="border border-stone-200 rounded-xl overflow-hidden mb-4 divide-y divide-stone-100">
+              {results.map((food) => (
                 <button
-                  key={t}
-                  onClick={() => setTag(tag === t ? null : t)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-                    tag === t
-                      ? 'bg-navy text-white border-navy'
-                      : 'bg-card text-stone-600 border-stone-200 hover:border-stone-300'
-                  }`}
+                  key={food.fdcId}
+                  onClick={() => handleSelect(food)}
+                  className="w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex items-center justify-between gap-3"
                 >
-                  {t}
+                  <p className="text-sm font-medium text-stone-800">{food.name}</p>
+                  <p className="text-xs text-stone-400 shrink-0">{food.nutrition.calories} kcal</p>
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Save / Cancel */}
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!canSave}
-            className="flex-1 py-3 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-          >
-            Add to plate
-          </button>
+          {/* Quantity input — only shown after selecting a food */}
+          {selected && (
+            <div className="mb-4">
+              <label className="block text-xs text-stone-500 font-medium mb-1.5 uppercase tracking-wider">
+                Quantity (grams)
+              </label>
+              <input
+                ref={quantityRef}
+                type="number"
+                placeholder="e.g. 100"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                inputMode="decimal"
+                className="w-full px-4 py-3 rounded-xl border border-stone-200 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
+              />
+            </div>
+          )}
+
+          {/* Nutrition preview — shown when food + quantity are entered */}
+          {preview && (
+            <div className="mb-4">
+              <div className="bg-stone-50 rounded-xl p-4 grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Calories', value: preview.calories, unit: 'kcal' },
+                  { label: 'Protein',  value: preview.protein,  unit: 'g'    },
+                  { label: 'Fat',      value: preview.fat,      unit: 'g'    },
+                  { label: 'Fiber',    value: preview.fiber,    unit: 'g'    },
+                ].map((m) => (
+                  <div key={m.label} className="text-center">
+                    <p className="text-xs text-stone-400 mb-0.5">{m.label}</p>
+                    <p className="text-sm font-bold text-stone-800">{m.value}</p>
+                    <p className="text-xs text-stone-400">{m.unit}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Toggle: expand / collapse micronutrient detail */}
+              <button
+                onClick={() => setShowMicros((v) => !v)}
+                className="flex items-center gap-1 mt-2 text-xs text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                {showMicros ? (
+                  <>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                      <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Hide details
+                  </>
+                ) : (
+                  <>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                      <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    View full nutrition
+                  </>
+                )}
+              </button>
+
+              {/* Expandable micronutrient list — per actual quantity entered */}
+              {showMicros && (
+                <div className="mt-3 rounded-xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
+                  {MICRONUTRIENT_LABELS.map((m) => (
+                    <div key={m.key} className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-xs text-stone-600">{m.label}</span>
+                      <span className="text-xs font-semibold text-stone-800">
+                        {preview[m.key] ?? 0}
+                        <span className="text-stone-400 font-normal ml-1">{m.unit}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Meal tag selector */}
+          {selected && (
+            <div className="mb-2">
+              <p className="text-xs text-stone-500 font-medium mb-2 uppercase tracking-wider">
+                Meal
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                {MEAL_TAGS.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTag(tag === t ? null : t)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                      tag === t
+                        ? 'bg-navy text-white border-navy'
+                        : 'bg-card text-stone-600 border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Sticky footer — Save / Cancel always visible */}
+        <div className="px-6 pt-4 pb-10 border-t border-stone-100">
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-3 rounded-xl border border-stone-200 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!canSave}
+              className="flex-1 py-3 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+            >
+              Add to plate
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );

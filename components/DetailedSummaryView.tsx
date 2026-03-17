@@ -1,6 +1,7 @@
 // Full-screen daily nutrition detail view — macros + all micronutrients for the selected date,
 // plus a 7-day insights card at the top. Accessible via /detailed-summary?date=YYYY-MM-DD.
 // AddEntryModal and SearchScreen are rendered locally so the user never leaves this screen.
+// Macro cards and micronutrient rows are tappable — expand inline to show per-item contributions.
 
 'use client';
 
@@ -16,6 +17,7 @@ import { FoodEntry, FoodSearchResult, MealTag, NutritionPer100g } from '@/lib/ty
 import {
   sumDayNutrition,
   compute7DayAggregate,
+  calculateNutrition,
   MICRONUTRIENT_LABELS,
   WeeklyAggregate,
 } from '@/lib/nutrition';
@@ -31,6 +33,28 @@ interface DetailedSummaryViewProps {
   initialDate: string; // "YYYY-MM-DD" from URL, or empty string (defaults to today)
 }
 
+// Macros shown in the summary grid — used for both display and breakdown computation
+const MACRO_KEYS: Array<{ key: keyof NutritionPer100g; label: string; unit: string }> = [
+  { key: 'calories', label: 'Calories', unit: 'kcal' },
+  { key: 'protein',  label: 'Protein',  unit: 'g'    },
+  { key: 'fat',      label: 'Fat',      unit: 'g'    },
+  { key: 'fiber',    label: 'Fiber',    unit: 'g'    },
+];
+
+/**
+ * For a given nutrient key, returns all entries that contributed > 0,
+ * sorted from highest to lowest contribution.
+ */
+function getContributors(entries: FoodEntry[], key: keyof NutritionPer100g) {
+  return entries
+    .map((e) => ({
+      name: e.ingredientName,
+      value: calculateNutrition(e.nutrition, e.quantity_g)[key] as number,
+    }))
+    .filter((c) => c.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
 export default function DetailedSummaryView({ initialDate }: DetailedSummaryViewProps) {
   const router = useRouter();
 
@@ -42,25 +66,32 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     return new Date();
   });
 
-  const [totals, setTotals]             = useState<NutritionPer100g>(sumDayNutrition([]));
-  const [hasEntries, setHasEntries]     = useState(false);
-  const [weeklyAggregate, setWeeklyAggregate] = useState<WeeklyAggregate>(compute7DayAggregate([]));
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showSearch, setShowSearch]     = useState(false);
-  // Incrementing refreshKey forces a data reload after an entry is saved
-  const [refreshKey, setRefreshKey]     = useState(0);
-  // Item name shown in success toast; null = hidden
-  const [successItem, setSuccessItem]   = useState<string | null>(null);
+  const [entries, setEntries]                     = useState<FoodEntry[]>([]);
+  const [totals, setTotals]                       = useState<NutritionPer100g>(sumDayNutrition([]));
+  const [hasEntries, setHasEntries]               = useState(false);
+  const [weeklyAggregate, setWeeklyAggregate]     = useState<WeeklyAggregate>(compute7DayAggregate([]));
+  const [showAddModal, setShowAddModal]           = useState(false);
+  const [showSearch, setShowSearch]               = useState(false);
+  const [refreshKey, setRefreshKey]               = useState(0);
+  const [successItem, setSuccessItem]             = useState<string | null>(null);
+  // Which macro card is expanded (null = none); tapping the same card again collapses it
+  const [expandedMacro, setExpandedMacro]         = useState<keyof NutritionPer100g | null>(null);
+  // Which micronutrient keys are expanded — each toggles independently
+  const [expandedMicros, setExpandedMicros]       = useState<Set<string>>(new Set());
 
   const dateStr  = toDateString(currentDate);
   const isToday  = dateStr === toDateString(new Date());
   const isFuture = currentDate > new Date() && !isToday;
 
-  // Reload entries and 7-day aggregate whenever the date changes or an entry is saved
+  // Reload data whenever the date changes or an entry is saved.
+  // Also resets all expanded state — breakdowns are per-day.
   useEffect(() => {
-    const entries = getEntriesForDate(dateStr);
-    setTotals(sumDayNutrition(entries));
-    setHasEntries(entries.length > 0);
+    const dayEntries = getEntriesForDate(dateStr);
+    setEntries(dayEntries);
+    setTotals(sumDayNutrition(dayEntries));
+    setHasEntries(dayEntries.length > 0);
+    setExpandedMacro(null);
+    setExpandedMicros(new Set());
 
     const dayData = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(currentDate);
@@ -96,14 +127,12 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     });
   }
 
-  // Auto-dismiss success toast after 2.5s
   useEffect(() => {
     if (!successItem) return;
     const t = setTimeout(() => setSuccessItem(null), 2500);
     return () => clearTimeout(t);
   }, [successItem]);
 
-  // Saves the entry to the date currently displayed, then reloads
   function handleSaveEntry(food: FoodSearchResult, quantity: number, tag: MealTag | null) {
     const entry: FoodEntry = {
       id: generateId(),
@@ -119,13 +148,32 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     setSuccessItem(food.name);
   }
 
+  function toggleMacro(key: keyof NutritionPer100g) {
+    setExpandedMacro((prev) => (prev === key ? null : key));
+  }
 
-  // Swipe left = next day, swipe right = prev day — same as the arrow buttons
+  function toggleMicro(key: string) {
+    setExpandedMicros((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  // Pre-compute macro breakdown for the currently expanded card
+  const macroBreakdown = expandedMacro && hasEntries
+    ? {
+        meta: MACRO_KEYS.find((m) => m.key === expandedMacro)!,
+        contributors: getContributors(entries, expandedMacro),
+      }
+    : null;
+
   const swipeHandlers = useSwipe({ onSwipeLeft: goToNext, onSwipeRight: goToPrev });
 
   return (
     <Fragment>
     <div className="max-w-md mx-auto px-4 pb-28" {...swipeHandlers}>
+
       {/* Back navigation */}
       <div className="pt-10 pb-4">
         <button
@@ -137,20 +185,18 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
       </div>
 
       <div className="space-y-4">
-        {/* 7-day insights — always shown */}
         <WeeklyInsights aggregate={weeklyAggregate} />
 
         {/* Daily detail card */}
         <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-5">
+
           {/* Date navigation */}
           <div className="flex items-center justify-between mb-2">
             <button
               onClick={goToPrev}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
               aria-label="Previous day"
-            >
-              ←
-            </button>
+            >←</button>
             <div className="text-center">
               <p className="text-xs text-stone-400 uppercase tracking-widest font-medium">
                 {isToday ? 'Today' : formatDateLabel(currentDate)}
@@ -164,49 +210,110 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
               disabled={isFuture}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               aria-label="Next day"
-            >
-              →
-            </button>
+            >→</button>
           </div>
 
-          {/* Empty state prompt — between date and macro cards */}
           {!hasEntries && (
             <div className="my-4">
-              <EmptyStatePrompt
-                label="Start by logging what you ate"
-                onTap={() => setShowAddModal(true)}
-              />
+              <EmptyStatePrompt label="Start by logging what you ate" onTap={() => setShowAddModal(true)} />
             </div>
           )}
 
-          {/* Macro cards — always shown; – when no entries */}
+          {/* Macro cards — tappable when entries exist */}
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <MacroCard label="Calories" value={hasEntries ? totals.calories : null} unit="kcal" highlight />
-            <MacroCard label="Protein"  value={hasEntries ? totals.protein  : null} unit="g" />
-            <MacroCard label="Fat"      value={hasEntries ? totals.fat      : null} unit="g" />
-            <MacroCard label="Fiber"    value={hasEntries ? totals.fiber    : null} unit="g" />
+            {MACRO_KEYS.map(({ key, label, unit }, i) => (
+              <MacroCard
+                key={key}
+                label={label}
+                value={hasEntries ? totals[key] as number : null}
+                unit={unit}
+                highlight={i === 0}
+                isSelected={expandedMacro === key}
+                onClick={hasEntries ? () => toggleMacro(key) : undefined}
+              />
+            ))}
           </div>
 
-          {/* Micronutrients — always shown; – when no entries */}
+          {/* Macro breakdown panel — slides in below the grid when a card is tapped */}
+          {macroBreakdown && (
+            <div className="mt-3 rounded-xl border border-stone-100 bg-stone-50 p-4">
+              <p className="text-xs text-stone-400 uppercase tracking-widest font-medium mb-3">
+                {macroBreakdown.meta.label}
+              </p>
+              {macroBreakdown.contributors.length > 0 ? (
+                <div className="space-y-2.5">
+                  {macroBreakdown.contributors.map((c) => (
+                    <div key={c.name} className="flex items-center justify-between gap-4">
+                      <span className="text-sm text-stone-600 truncate">{c.name}</span>
+                      <span className="text-sm font-medium text-stone-700 shrink-0">
+                        {c.value}
+                        <span className="text-xs text-stone-400 font-normal ml-1">{macroBreakdown.meta.unit}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-stone-300">Nothing contributed</p>
+              )}
+            </div>
+          )}
+
+          {/* Micronutrients — accordion, each row toggles independently */}
           <div className="mt-5 pt-4 border-t border-stone-100">
-            <p className="text-xs text-stone-400 uppercase tracking-widest font-medium mb-3">
+            <p className="text-xs text-stone-400 uppercase tracking-widest font-medium mb-1">
               Micronutrients
             </p>
-            <div className="space-y-2.5">
-              {MICRONUTRIENT_LABELS.map(({ key, label, unit }) => (
-                <div key={key} className="flex items-center justify-between">
-                  <span className="text-sm text-stone-500">{label}</span>
-                  <span className="text-sm font-medium text-stone-700">
-                    {hasEntries ? `${totals[key]} ${unit}` : '–'}
-                  </span>
-                </div>
-              ))}
+            <div>
+              {MICRONUTRIENT_LABELS.map(({ key, label, unit }) => {
+                const isOpen = expandedMicros.has(key);
+                const contributors = hasEntries ? getContributors(entries, key) : [];
+
+                return (
+                  <div key={key}>
+                    <button
+                      onClick={hasEntries ? () => toggleMicro(key) : undefined}
+                      disabled={!hasEntries}
+                      className={`w-full flex items-center justify-between py-2.5 text-left rounded-lg transition-colors ${
+                        hasEntries ? 'cursor-pointer hover:bg-stone-50 -mx-1 px-1' : 'cursor-default'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 text-sm text-stone-500">
+                        {hasEntries && <Chevron open={isOpen} />}
+                        {label}
+                      </span>
+                      <span className="text-sm font-medium text-stone-700">
+                        {hasEntries ? `${totals[key]} ${unit}` : '–'}
+                      </span>
+                    </button>
+
+                    {/* Per-item contributors — visible when row is expanded */}
+                    {isOpen && (
+                      <div className="pb-2 pl-5 space-y-1.5">
+                        {contributors.length > 0 ? (
+                          contributors.map((c) => (
+                            <div key={c.name} className="flex items-center justify-between gap-4">
+                              <span className="text-xs text-stone-400 truncate">{c.name}</span>
+                              <span className="text-xs font-medium text-stone-500 shrink-0">
+                                {c.value}
+                                <span className="font-normal ml-1 text-stone-400">{unit}</span>
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-stone-300">Nothing contributed</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
+
         </div>
       </div>
 
-      {/* Sticky bottom bar — modals open on this screen, no navigation away */}
+      {/* Sticky bottom bar */}
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-4 bg-gradient-to-t from-[var(--color-background)] to-transparent">
         <div className="max-w-md mx-auto flex gap-3">
           <button
@@ -229,21 +336,16 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
         </div>
       </div>
 
-      {/* Modals — rendered locally so the user stays on this screen */}
       {showAddModal && (
         <AddEntryModal onSave={handleSaveEntry} onClose={() => setShowAddModal(false)} />
       )}
       {showSearch && (
-        <SearchScreen
-          onClose={() => setShowSearch(false)}
-          onSave={handleSaveEntry}
-          targetDate={dateStr}
-        />
+        <SearchScreen onClose={() => setShowSearch(false)} onSave={handleSaveEntry} targetDate={dateStr} />
       )}
 
     </div>
 
-    {/* Success toast — rendered outside the page div to avoid any stacking context */}
+    {/* Success toast — outside page div to avoid stacking context issues */}
     {successItem && <SuccessToast itemName={successItem} targetDate={dateStr} />}
     </Fragment>
   );
@@ -251,19 +353,66 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
 
 // --- Sub-components ---
 
+/**
+ * Chevron icon — points right (›) when collapsed, rotates to point down (↓) when open.
+ * Used as the expand affordance on micronutrient rows.
+ */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10" height="10" viewBox="0 0 10 10" fill="none"
+      className={`transition-transform duration-150 text-stone-400 shrink-0 ${open ? 'rotate-90' : ''}`}
+      aria-hidden="true"
+    >
+      <path d="M3.5 2L7 5L3.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Single macro display card in the 2×2 grid.
+ * When onClick is provided (i.e. entries exist), the card is tappable —
+ * a small chevron in the label row signals this affordance.
+ */
 function MacroCard({
-  label, value, unit, highlight = false,
+  label, value, unit, highlight = false, isSelected = false, onClick,
 }: {
-  label: string; value: number | null; unit: string; highlight?: boolean;
+  label: string;
+  value: number | null;
+  unit: string;
+  highlight?: boolean;
+  isSelected?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <div
-      className={`rounded-xl p-3 ${highlight ? 'text-white' : 'bg-stone-50 text-stone-800'}`}
+      onClick={onClick}
+      className={`rounded-xl p-3 transition-all ${
+        highlight ? 'text-white' : 'bg-stone-50'
+      } ${onClick ? 'cursor-pointer' : ''} ${
+        isSelected && !highlight ? 'ring-2 ring-offset-1 ring-stone-300' : ''
+      } ${
+        isSelected && highlight ? 'ring-2 ring-offset-1 ring-white/40' : ''
+      }`}
       style={highlight ? { backgroundColor: 'var(--color-navy-mid)' } : undefined}
     >
-      <p className={`text-xs uppercase tracking-widest font-medium mb-1 ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>
-        {label}
-      </p>
+      {/* Label row — chevron appears here when the card is tappable */}
+      <div className="flex items-center justify-between mb-1">
+        <p className={`text-xs uppercase tracking-widest font-medium ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>
+          {label}
+        </p>
+        {onClick && (
+          <svg
+            width="10" height="10" viewBox="0 0 10 10" fill="none"
+            className={`transition-transform duration-150 shrink-0 ${isSelected ? 'rotate-90' : ''} ${highlight ? 'text-blue-100' : 'text-stone-300'}`}
+            aria-hidden="true"
+          >
+            <path d="M3.5 2L7 5L3.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+
+      {/* Value */}
       <p className={`text-2xl font-bold leading-none ${highlight ? 'text-white' : 'text-stone-800'}`}>
         {value === null ? (
           <span className={`text-lg ${highlight ? 'text-blue-200' : 'text-stone-300'}`}>–</span>

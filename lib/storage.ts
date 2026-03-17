@@ -85,6 +85,39 @@ export function setWaterForDate(date: string, ml: number): void {
   localStorage.setItem(WATER_KEY, JSON.stringify(others));
 }
 
+// --- Recent Foods ---
+
+/**
+ * Returns up to `limit` unique foods logged in the last `days` days,
+ * ordered by most recently added. Used to power the "Quick add" pills
+ * in the Add Entry modal. Deduplicates by ingredient name — only the
+ * most recent occurrence of each food is kept.
+ */
+export function getRecentFoods(limit = 5, days = 3): import('./types').FoodSearchResult[] {
+  const all = getAllEntries();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = toDateString(cutoff);
+
+  // Work newest-first so the first occurrence of each name is the most recent
+  const recent = [...all]
+    .filter((e) => e.date >= cutoffStr)
+    .sort((a, b) => b.id.localeCompare(a.id));
+
+  const seen = new Set<string>();
+  const results: import('./types').FoodSearchResult[] = [];
+
+  for (const entry of recent) {
+    const key = entry.ingredientName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push({ fdcId: 0, name: entry.ingredientName, nutrition: entry.nutrition });
+    if (results.length >= limit) break;
+  }
+
+  return results;
+}
+
 // --- Utility ---
 
 /**
