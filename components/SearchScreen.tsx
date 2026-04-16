@@ -6,27 +6,33 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FoodSearchResult, MealTag } from '@/lib/types';
+import { EntryStatus, FoodSearchResult, MealTag } from '@/lib/types';
 import { MICRONUTRIENT_LABELS } from '@/lib/nutrition';
 import AddEntryModal from '@/components/AddEntryModal';
 import SuccessToast from '@/components/SuccessToast';
 
 interface SearchScreenProps {
   onClose: () => void;
-  onSave: (food: FoodSearchResult, quantity: number, tag: MealTag | null) => void;
-  // The date currently being viewed — Add to plate saves to this date
+  onSave: (food: FoodSearchResult, quantity: number, tag: MealTag | null, status: EntryStatus, planOrigin: boolean, targetDate?: string) => void;
+  // targetDate is always today — Search has no date context; "Add to plate" always logs to today
   targetDate: string;
+  planMode?: boolean;
+  // Called when "Add to plan" is tapped and plan mode is currently OFF — auto-enables it
+  onEnablePlanMode?: () => void;
 }
 
-export default function SearchScreen({ onClose, onSave, targetDate }: SearchScreenProps) {
+export default function SearchScreen({ onClose, onSave, targetDate, planMode = false, onEnablePlanMode }: SearchScreenProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selected, setSelected] = useState<FoodSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
+  // null = no modal open; 'plate' = Add to plate flow; 'plan' = Add to plan flow (with date picker)
+  const [modalMode, setModalMode] = useState<'plate' | 'plan' | null>(null);
   // Holds the item name shown in the success toast; null = toast hidden
   const [successItem, setSuccessItem] = useState<string | null>(null);
+  // Date the last save actually went to — drives the toast message
+  const [saveTargetDate, setSaveTargetDate] = useState(targetDate);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,17 +104,26 @@ export default function SearchScreen({ onClose, onSave, targetDate }: SearchScre
   }
 
   // Called when the user confirms quantity + tag in the AddEntryModal.
-  // Clears search state immediately so the screen is fresh when the toast fades.
-  function handleModalSave(food: FoodSearchResult, quantity: number, tag: MealTag | null) {
-    onSave(food, quantity, tag);
-    setShowAddModal(false);
+  // Forwards all params to the parent save handler and resets search state.
+  function handleModalSave(food: FoodSearchResult, quantity: number, tag: MealTag | null, status: EntryStatus, planOrigin: boolean, savedToDate?: string) {
+    onSave(food, quantity, tag, status, planOrigin, savedToDate);
+    setModalMode(null);
     setSelected(null);
     setQuery('');
     setResults([]);
-    // Show success toast, auto-dismiss after 2.5s
+    setSaveTargetDate(savedToDate ?? targetDate);
     setSuccessItem(food.name);
     if (successTimer.current) clearTimeout(successTimer.current);
     successTimer.current = setTimeout(() => setSuccessItem(null), 2500);
+  }
+
+  function handleAddToPlate() {
+    setModalMode('plate');
+  }
+
+  function handleAddToPlan() {
+    if (!planMode) onEnablePlanMode?.();
+    setModalMode('plan');
   }
 
   return (
@@ -181,24 +196,38 @@ export default function SearchScreen({ onClose, onSave, targetDate }: SearchScre
         {/* Nutrition breakdown — shown once a food is selected */}
         {selected && (
           <div>
-            {/* Food name + per 100g label + Add to plate CTA */}
-            <div className="flex items-start justify-between gap-3 mb-5">
-              <div>
+            {/* Food name + per 100g label + CTAs */}
+            <div className="mb-5">
+              <div className="mb-3">
                 <h2 className="text-lg font-semibold text-stone-800 capitalize">
                   {selected.name.toLowerCase()}
                 </h2>
                 <p className="text-xs text-stone-400 mt-0.5">Per 100g</p>
               </div>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border shrink-0 transition-opacity hover:opacity-70"
-                style={{ color: 'var(--color-navy)', borderColor: 'var(--color-navy)' }}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                  <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-                Add to plate
-              </button>
+              <div className="flex gap-2">
+                {/* Add to plate — always saves to today */}
+                <button
+                  onClick={handleAddToPlate}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border shrink-0 transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--color-navy)', borderColor: 'var(--color-navy)' }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                    <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                  Add to plate
+                </button>
+                {/* Add to plan — opens date picker modal, auto-enables plan mode */}
+                <button
+                  onClick={handleAddToPlan}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border shrink-0 transition-opacity hover:opacity-70 border-stone-300 text-stone-600 bg-card"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                    <rect x="1" y="2" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+                    <path d="M3 1v2M7 1v2M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                  Add to plan
+                </button>
+              </div>
             </div>
 
             {/* Macronutrients */}
@@ -245,17 +274,30 @@ export default function SearchScreen({ onClose, onSave, targetDate }: SearchScre
       </div>
       </div>{/* end max-w-md */}
 
-      {/* Add Entry modal — opens on top of this screen with the food pre-selected */}
-      {showAddModal && selected && (
+      {/* Add Entry modal — "Add to plate" path: standard eaten entry, saves to today */}
+      {modalMode === 'plate' && selected && (
         <AddEntryModal
           initialFood={selected}
           onSave={handleModalSave}
-          onClose={() => setShowAddModal(false)}
+          onClose={() => setModalMode(null)}
+          planMode={false}
+        />
+      )}
+
+      {/* Add Entry modal — "Add to plan" path: date picker, always planned */}
+      {modalMode === 'plan' && selected && (
+        <AddEntryModal
+          initialFood={selected}
+          onSave={handleModalSave}
+          onClose={() => setModalMode(null)}
+          planMode={true}
+          isFuture={false}
+          showDatePicker={true}
         />
       )}
 
       {/* Success toast — appears after saving, auto-dismisses after 2.5s */}
-      {successItem && <SuccessToast itemName={successItem} targetDate={targetDate} />}
+      {successItem && <SuccessToast itemName={successItem} targetDate={saveTargetDate} />}
     </div>
   );
 }

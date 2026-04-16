@@ -13,7 +13,7 @@ import AddEntryModal from '@/components/AddEntryModal';
 import SearchScreen from '@/components/SearchScreen';
 import SuccessToast from '@/components/SuccessToast';
 import EmptyStatePrompt from '@/components/EmptyStatePrompt';
-import { FoodEntry, FoodSearchResult, MealTag, NutritionPer100g } from '@/lib/types';
+import { EntryStatus, FoodEntry, FoodSearchResult, MealTag, NutritionPer100g } from '@/lib/types';
 import {
   sumDayNutrition,
   compute7DayAggregate,
@@ -80,28 +80,36 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
   const [expandedMicros, setExpandedMicros]       = useState<Set<string>>(new Set());
 
   const dateStr  = toDateString(currentDate);
-  const isToday  = dateStr === toDateString(new Date());
-  const isFuture = currentDate > new Date() && !isToday;
+  const todayStr = toDateString(new Date());
+  const isToday  = dateStr === todayStr;
+  // Use string comparison (YYYY-MM-DD) — avoids timezone-induced date shifting
+  const isFuture = dateStr > todayStr;
+  const isPast   = dateStr < todayStr;
 
   // Reload data whenever the date changes or an entry is saved.
   // Also resets all expanded state — breakdowns are per-day.
   useEffect(() => {
-    const dayEntries = getEntriesForDate(dateStr);
-    setEntries(dayEntries);
-    setTotals(sumDayNutrition(dayEntries));
-    setHasEntries(dayEntries.length > 0);
+    const allDayEntries = getEntriesForDate(dateStr);
+    // Future dates show planned entries; today and past show eaten entries only
+    const displayEntries = isFuture
+      ? allDayEntries.filter((e) => e.planOrigin === true)
+      : allDayEntries.filter((e) => e.status === 'eaten' || !e.status);
+    setEntries(displayEntries);
+    setTotals(sumDayNutrition(displayEntries));
+    setHasEntries(displayEntries.length > 0);
     setExpandedMacro(null);
     setExpandedMicros(new Set());
 
+    // Weekly insights always use eaten entries only — planned items don't count as consumed
     const dayData = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(currentDate);
       d.setDate(d.getDate() - (6 - i));
       const ds = toDateString(d);
-      const de = getEntriesForDate(ds);
+      const de = getEntriesForDate(ds).filter((e) => e.status === 'eaten' || !e.status);
       return { totals: sumDayNutrition(de), hasEntries: de.length > 0, waterMl: getWaterForDate(ds) };
     });
     setWeeklyAggregate(compute7DayAggregate(dayData));
-  }, [dateStr, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dateStr, refreshKey, isFuture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep URL in sync as user navigates (replace, not push — avoids back-button spam)
   useEffect(() => {
@@ -116,16 +124,30 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     });
   }
 
+  // Plan Mode is owned by page.tsx but survives route changes via sessionStorage.
+  // Starts false to match SSR, then corrects after hydration — avoids hydration mismatch.
+  const [planModeActive, setPlanModeActive] = useState(false);
+  const MAX_FUTURE_DAYS = 14;
+
+  useEffect(() => {
+    if (sessionStorage.getItem('planMode') === 'true') setPlanModeActive(true);
+  }, []);
+
   function goToNext() {
     setCurrentDate((d) => {
       const next = new Date(d);
       next.setDate(next.getDate() + 1);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      if (next > today) return d;
+      const limit = new Date();
+      limit.setDate(limit.getDate() + (planModeActive ? MAX_FUTURE_DAYS : 0));
+      if (toDateString(next) > toDateString(limit)) return d;
       return next;
     });
   }
+
+  // Forward navigation allowed up to today (plan mode off) or today+14 (plan mode on)
+  const forwardLimit = new Date();
+  forwardLimit.setDate(forwardLimit.getDate() + (planModeActive ? MAX_FUTURE_DAYS : 0));
+  const nextDisabled = dateStr >= toDateString(forwardLimit);
 
   useEffect(() => {
     if (!successItem) return;
@@ -133,14 +155,26 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
     return () => clearTimeout(t);
   }, [successItem]);
 
-  function handleSaveEntry(food: FoodSearchResult, quantity: number, tag: MealTag | null) {
+  // Accepts full Plan Mode signature for compatibility with AddEntryModal and SearchScreen.
+  // DetailedSummary has no plan mode — status/planOrigin/targetDate params are forwarded but
+  // entries always land on the currently viewed date.
+  function handleSaveEntry(
+    food: FoodSearchResult,
+    quantity: number,
+    tag: MealTag | null,
+    status: EntryStatus = 'eaten',
+    planOrigin: boolean = false,
+    targetDate?: string,
+  ) {
     const entry: FoodEntry = {
       id: generateId(),
-      date: dateStr,
+      date: targetDate ?? dateStr,
       ingredientName: food.name,
       quantity_g: quantity,
       tag,
       nutrition: food.nutrition,
+      status,
+      planOrigin,
     };
     saveEntry(entry);
     setShowAddModal(false);
@@ -172,7 +206,7 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
 
   return (
     <Fragment>
-    <div className="max-w-md mx-auto px-4 pb-28" {...swipeHandlers}>
+    <div className={`max-w-md mx-auto px-4 pb-28 ${isFuture ? 'future-plan-tint' : ''}`} {...swipeHandlers}>
 
       {/* Back navigation */}
       <div className="pt-10 pb-4">
@@ -207,31 +241,50 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
             </div>
             <button
               onClick={goToNext}
-              disabled={isFuture}
+              disabled={nextDisabled}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               aria-label="Next day"
             >→</button>
           </div>
 
+          {/* Planned view banner — only shown when there are actual planned entries to display */}
+          {isFuture && hasEntries && (
+            <div
+              className="flex items-center justify-center px-3 py-1 rounded-lg mb-3 mt-1"
+              style={{ backgroundColor: 'var(--color-navy-mid)' }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-widest text-white">
+                Based on meal plan
+              </span>
+            </div>
+          )}
+
           {!hasEntries && (
             <div className="my-4">
-              <EmptyStatePrompt label="Start by logging what you ate" onTap={() => setShowAddModal(true)} />
+              <EmptyStatePrompt
+                label={isFuture ? 'Plan your meal' : 'Start by logging what you ate'}
+                onTap={() => setShowAddModal(true)}
+              />
             </div>
           )}
 
           {/* Macro cards — tappable when entries exist */}
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            {MACRO_KEYS.map(({ key, label, unit }, i) => (
-              <MacroCard
-                key={key}
-                label={label}
-                value={hasEntries ? totals[key] as number : null}
-                unit={unit}
-                highlight={i === 0}
-                isSelected={expandedMacro === key}
-                onClick={hasEntries ? () => toggleMacro(key) : undefined}
-              />
-            ))}
+          <div className="relative overflow-hidden rounded-xl mt-3">
+            <div className="grid grid-cols-2 gap-3">
+              {MACRO_KEYS.map(({ key, label, unit }, i) => (
+                <MacroCard
+                  key={key}
+                  label={label}
+                  value={hasEntries ? totals[key] as number : null}
+                  unit={unit}
+                  highlight={i === 0}
+                  isFuture={isFuture}
+                  isSelected={expandedMacro === key}
+                  onClick={hasEntries ? () => toggleMacro(key) : undefined}
+                />
+              ))}
+            </div>
+            {/* No corner tag here — the "Based on meal plan" banner above already signals the planned view */}
           </div>
 
           {/* Macro breakdown panel — slides in below the grid when a card is tapped */}
@@ -337,10 +390,22 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
       </div>
 
       {showAddModal && (
-        <AddEntryModal onSave={handleSaveEntry} onClose={() => setShowAddModal(false)} />
+        <AddEntryModal
+          onSave={handleSaveEntry}
+          onClose={() => setShowAddModal(false)}
+          planMode={planModeActive}
+          isFuture={isFuture}
+          isPast={isPast}
+        />
       )}
       {showSearch && (
-        <SearchScreen onClose={() => setShowSearch(false)} onSave={handleSaveEntry} targetDate={dateStr} />
+        // Search is date-agnostic — "Add to plate" always logs to today, not the viewed date
+        <SearchScreen
+          onClose={() => setShowSearch(false)}
+          onSave={handleSaveEntry}
+          targetDate={toDateString(new Date())}
+          planMode={false}
+        />
       )}
 
     </div>
@@ -375,26 +440,33 @@ function Chevron({ open }: { open: boolean }) {
  * a small chevron in the label row signals this affordance.
  */
 function MacroCard({
-  label, value, unit, highlight = false, isSelected = false, onClick,
+  label, value, unit, highlight = false, isFuture = false, isSelected = false, onClick,
 }: {
   label: string;
   value: number | null;
   unit: string;
   highlight?: boolean;
+  isFuture?: boolean;
   isSelected?: boolean;
   onClick?: () => void;
 }) {
+  const bgStyle: React.CSSProperties = highlight
+    ? { backgroundColor: 'var(--color-navy-mid)', opacity: isFuture ? 0.82 : 1 }
+    : isFuture
+    ? { backgroundColor: 'var(--color-planned-bg)' }
+    : {};
+
   return (
     <div
       onClick={onClick}
       className={`rounded-xl p-3 transition-all ${
-        highlight ? 'text-white' : 'bg-stone-50'
+        highlight ? 'text-white' : isFuture ? '' : 'bg-stone-50'
       } ${onClick ? 'cursor-pointer' : ''} ${
         isSelected && !highlight ? 'ring-2 ring-offset-1 ring-stone-300' : ''
       } ${
         isSelected && highlight ? 'ring-2 ring-offset-1 ring-white/40' : ''
       }`}
-      style={highlight ? { backgroundColor: 'var(--color-navy-mid)' } : undefined}
+      style={bgStyle}
     >
       {/* Label row — chevron appears here when the card is tappable */}
       <div className="flex items-center justify-between mb-1">
@@ -427,6 +499,35 @@ function MacroCard({
   );
 }
 
+// Top-right corner ribbon — "Best Seller" style diagonal banner.
+// Outer div is the overflow-hidden clip box anchored to the top-right of the grid.
+// Inner strip is rotated 45° with its centre sitting at the corner point.
+function PlanCornerTag() {
+  return (
+    <div
+      className="absolute top-0 right-0 overflow-hidden pointer-events-none"
+      style={{ width: 78, height: 78 }}
+    >
+      <div
+        className="absolute text-center font-bold tracking-widest uppercase text-white"
+        style={{
+          top: 18,
+          right: -18,
+          width: 84,
+          transform: 'rotate(45deg)',
+          transformOrigin: 'center center',
+          backgroundColor: 'var(--color-navy-mid)',
+          fontSize: 8,
+          letterSpacing: '0.12em',
+          padding: '4px 0',
+        }}
+      >
+        PLAN
+      </div>
+    </div>
+  );
+}
+
 // --- Helpers ---
 
 function formatDate(d: Date): string {
@@ -436,6 +537,9 @@ function formatDate(d: Date): string {
 function formatDateLabel(d: Date): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
   if (toDateString(d) === toDateString(yesterday)) return 'Yesterday';
+  if (toDateString(d) === toDateString(tomorrow)) return 'Tomorrow';
   return d.toLocaleDateString('en-IN', { weekday: 'long' });
 }

@@ -89,7 +89,7 @@ export default function WeeklyInsights({ aggregate }: WeeklyInsightsProps) {
               <path d="M8 7.5v3.5M8 5v.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             <p className="text-xs font-medium text-stone-600 leading-snug">
-              Log meals for all 7 days to unlock your weekly averages.
+              Log what you ate for all 7 days to unlock your weekly averages.
             </p>
           </div>
         )}

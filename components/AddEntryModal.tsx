@@ -5,20 +5,43 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FoodSearchResult, MealTag } from '@/lib/types';
+import { EntryStatus, FoodSearchResult, MealTag } from '@/lib/types';
 import { calculateNutrition, MICRONUTRIENT_LABELS } from '@/lib/nutrition';
-import { getRecentFoods } from '@/lib/storage';
+import { getRecentFoods, toDateString } from '@/lib/storage';
 
 interface AddEntryModalProps {
-  onSave: (result: FoodSearchResult, quantity: number, tag: MealTag | null) => void;
+  onSave: (result: FoodSearchResult, quantity: number, tag: MealTag | null, status: EntryStatus, planOrigin: boolean, targetDate?: string) => void;
   onClose: () => void;
   // When provided, skip the search step and open directly at quantity input
   initialFood?: FoodSearchResult;
+  // Plan Mode context — controls title, checkbox visibility, and CTA copy
+  planMode?: boolean;
+  isFuture?: boolean;
+  isPast?: boolean;
+  // When true, shows a date picker at the top of the modal (used from Search → "Add to plan")
+  showDatePicker?: boolean;
+}
+
+// Generates date pill options from today to +14 days for the plan date picker
+function getPlanDateOptions(): Array<{ label: string; value: string }> {
+  const options: Array<{ label: string; value: string }> = [];
+  const today = new Date();
+  for (let i = 0; i <= 14; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const value = toDateString(d);
+    let label: string;
+    if (i === 0) label = 'Today';
+    else if (i === 1) label = 'Tomorrow';
+    else label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    options.push({ label, value });
+  }
+  return options;
 }
 
 const MEAL_TAGS: MealTag[] = ['Breakfast', 'Lunch', 'Snack', 'Dinner'];
 
-export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntryModalProps) {
+export default function AddEntryModal({ onSave, onClose, initialFood, planMode = false, isFuture = false, isPast = false, showDatePicker = false }: AddEntryModalProps) {
   const [query, setQuery] = useState(initialFood?.name ?? '');
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selected, setSelected] = useState<FoodSearchResult | null>(initialFood ?? null);
@@ -27,6 +50,23 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showMicros, setShowMicros] = useState(false);
+  // "Mark as eaten" checkbox — only shown in Plan Mode on today (not future dates or date picker flow).
+  // Unchecked = save as planned; checked = save as eaten directly.
+  const [markAsEaten, setMarkAsEaten] = useState(false);
+  // Selected date for the plan date picker — defaults to today, user can pick up to +14 days.
+  // Only relevant when showDatePicker=true (opened from Search → "Add to plan").
+  const [selectedPlanDate, setSelectedPlanDate] = useState(() => toDateString(new Date()));
+  const planDateOptions = showDatePicker ? getPlanDateOptions() : [];
+
+  // Whether this entry will be saved as a planned item.
+  // Past dates are ALWAYS eaten regardless of plan mode.
+  // Future dates are ALWAYS planned.
+  // Today + plan mode ON: planned unless user ticks "Mark as eaten".
+  const isPlanEntry = showDatePicker
+    ? true
+    : isFuture
+    ? true
+    : planMode && !isPast && !markAsEaten;
   // Loaded once on mount — top 5 foods from the last 3 days
   const [recentFoods] = useState<FoodSearchResult[]>(() =>
     initialFood ? [] : getRecentFoods(5, 3)
@@ -108,7 +148,12 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
 
   function handleSave() {
     if (!selected || !quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) return;
-    onSave(selected, Number(quantity), tag);
+    const status: EntryStatus = isPlanEntry ? 'planned' : 'eaten';
+    // planOrigin is true only when the entry is saved as planned — records its plan history forever
+    const planOrigin = isPlanEntry;
+    // targetDate only set from the date picker path; otherwise parent uses its current date
+    const targetDate = showDatePicker ? selectedPlanDate : undefined;
+    onSave(selected, Number(quantity), tag, status, planOrigin, targetDate);
   }
 
   // Calculate nutrition preview based on entered quantity
@@ -135,7 +180,9 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
           <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-5" />
 
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-stone-800">Add what you ate</h2>
+            <h2 className="text-lg font-semibold text-stone-800">
+              {isFuture ? 'Plan a meal' : 'Add an item'}
+            </h2>
             <button
               onClick={onClose}
               className="text-stone-400 hover:text-stone-600 text-2xl leading-none"
@@ -144,6 +191,29 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
               ×
             </button>
           </div>
+
+          {/* Date picker — shown only in "Add to plan from Search" path */}
+          {showDatePicker && (
+            <div className="mb-5">
+              <p className="text-xs text-stone-500 font-medium mb-2 uppercase tracking-wider">Plan for</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                {planDateOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSelectedPlanDate(opt.value)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                      selectedPlanDate === opt.value
+                        ? 'text-white border-transparent'
+                        : 'bg-card text-stone-600 border-stone-200 hover:border-stone-300'
+                    }`}
+                    style={selectedPlanDate === opt.value ? { backgroundColor: 'var(--color-navy)' } : undefined}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Search input */}
           <div className="relative mb-4">
@@ -305,6 +375,19 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
 
         {/* Sticky footer — Save / Cancel always visible */}
         <div className="px-6 pt-4 pb-10 border-t border-stone-100">
+          {/* "Mark as eaten" checkbox — Plan Mode ON on TODAY only (not past, not future, not date picker) */}
+          {planMode && !isFuture && !isPast && !showDatePicker && selected && (
+            <label className="flex items-center gap-2.5 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={markAsEaten}
+                onChange={(e) => setMarkAsEaten(e.target.checked)}
+                className="w-4 h-4 rounded cursor-pointer"
+                style={{ accentColor: 'var(--color-navy)' }}
+              />
+              <span className="text-sm text-stone-600">Mark as eaten</span>
+            </label>
+          )}
           <div className="flex gap-3">
             <button
               onClick={onClose}
@@ -317,7 +400,7 @@ export default function AddEntryModal({ onSave, onClose, initialFood }: AddEntry
               disabled={!canSave}
               className="flex-1 py-3 rounded-xl bg-navy text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
             >
-              Add to plate
+              {isPlanEntry ? 'Add to meal plan' : 'Add to plate'}
             </button>
           </div>
         </div>

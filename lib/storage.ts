@@ -1,6 +1,11 @@
 // All localStorage read/write logic lives here.
 // Components never touch localStorage directly — they go through these functions.
 // This makes it easy to later swap localStorage for a real database in one place.
+//
+// Plan Mode additions:
+//   confirmEntry(id)   — marks a planned entry as eaten (status: 'planned' → 'eaten')
+//   unconfirmEntry(id) — reverts a checked-off entry back to planned (status: 'eaten' → 'planned')
+//   getRecentFoods     — filters to eaten entries only; planned items excluded from quick-add pills
 
 import { FoodEntry, WaterEntry } from './types';
 
@@ -85,6 +90,34 @@ export function setWaterForDate(date: string, ml: number): void {
   localStorage.setItem(WATER_KEY, JSON.stringify(others));
 }
 
+/**
+ * Marks a planned entry as eaten.
+ * Sets status to 'eaten'. Does not change planOrigin — the entry's plan history is preserved.
+ * Called when the user taps the checkbox on a planned row in "On the menu".
+ */
+export function confirmEntry(id: string): void {
+  const all = getAllEntries();
+  const idx = all.findIndex((e) => e.id === id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], status: 'eaten' };
+    localStorage.setItem(ENTRIES_KEY, JSON.stringify(all));
+  }
+}
+
+/**
+ * Reverts a checked-off planned entry back to planned state.
+ * Sets status to 'planned'. Does not change planOrigin.
+ * Called when the user taps the strikethrough checkbox in "On the menu" to uncheck it.
+ */
+export function unconfirmEntry(id: string): void {
+  const all = getAllEntries();
+  const idx = all.findIndex((e) => e.id === id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], status: 'planned' };
+    localStorage.setItem(ENTRIES_KEY, JSON.stringify(all));
+  }
+}
+
 // --- Recent Foods ---
 
 /**
@@ -92,6 +125,7 @@ export function setWaterForDate(date: string, ml: number): void {
  * ordered by most recently added. Used to power the "Quick add" pills
  * in the Add Entry modal. Deduplicates by ingredient name — only the
  * most recent occurrence of each food is kept.
+ * Only draws from eaten entries — planned-but-uneaten items are excluded.
  */
 export function getRecentFoods(limit = 5, days = 3): import('./types').FoodSearchResult[] {
   const all = getAllEntries();
@@ -99,9 +133,10 @@ export function getRecentFoods(limit = 5, days = 3): import('./types').FoodSearc
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = toDateString(cutoff);
 
-  // Work newest-first so the first occurrence of each name is the most recent
+  // Work newest-first so the first occurrence of each name is the most recent.
+  // Exclude planned entries — only foods actually eaten should surface as quick-add pills.
   const recent = [...all]
-    .filter((e) => e.date >= cutoffStr)
+    .filter((e) => e.date >= cutoffStr && (e.status === 'eaten' || !e.status))
     .sort((a, b) => b.id.localeCompare(a.id));
 
   const seen = new Set<string>();

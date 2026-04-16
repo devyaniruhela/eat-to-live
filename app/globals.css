@@ -9,11 +9,14 @@
   --color-rose: #c87080;
   --color-rose-light: #d4848a;
   --color-card: #FCFCFA;
+  /* Plan Mode — background for "On the menu" rows and section; a light navy tint */
+  --color-planned-bg: #EEF1F7;
 }
 
 /* ─── Explicit utilities — supplement @theme inline for values that  ─── */
 /* ─── don't reliably generate Tailwind classes (e.g. bg-card)       ─── */
-.bg-card { background-color: var(--color-card); }
+.bg-card    { background-color: var(--color-card); }
+.bg-planned { background-color: var(--color-planned-bg); }
 
 /* ─── Base ──────────────────────────────────────────────────────── */
 body {
@@ -54,6 +57,26 @@ html {
 }
 .animate-pop-in {
   animation: pop-in 0.28s ease-out forwards;
+}
+
+/* ─── Plan Mode animations ──────────────────────────────────────── */
+/* Fade + dim when a planned item is checked off in "On the menu" */
+@keyframes scratch-in {
+  0%   { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+.animate-scratch {
+  animation: scratch-in 0.3s ease-out forwards;
+}
+
+/* Subtle tint overlay for future-date (planning) views */
+.future-plan-tint::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 39, 68, 0.025);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* ─── Interactions — quick, physical press feel ─────────────────── */

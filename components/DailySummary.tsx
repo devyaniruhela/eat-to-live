@@ -8,6 +8,9 @@ import Link from 'next/link';
 import { FoodEntry } from '@/lib/types';
 import { sumDayNutrition } from '@/lib/nutrition';
 
+// How many days ahead Plan Mode allows navigation — must match page.tsx goToNextDay cap.
+const MAX_FUTURE_DAYS = 14;
+
 interface DailySummaryProps {
   entries: FoodEntry[];
   waterMl: number;
@@ -15,6 +18,8 @@ interface DailySummaryProps {
   onPrevDay: () => void;
   onNextDay: () => void;
   onEditWater: (ml: number) => void;
+  planMode: boolean;
+  isFuture: boolean;
 }
 
 export default function DailySummary({
@@ -24,10 +29,34 @@ export default function DailySummary({
   onPrevDay,
   onNextDay,
   onEditWater,
+  planMode,
+  isFuture,
 }: DailySummaryProps) {
-  const totals = sumDayNutrition(entries);
   const isToday = toDateStr(date) === toDateStr(new Date());
-  const isFuture = date > new Date() && !isToday;
+
+  // Split entries for Plan Mode display
+  const eatenEntries = entries.filter((e) => e.status === 'eaten' || !e.status);
+  const planOriginEntries = entries.filter((e) => e.planOrigin === true);
+  const uncheckedPlanEntries = planOriginEntries.filter((e) => e.status === 'planned');
+
+  // Future dates show planned totals; today/past show eaten totals
+  const displayEntries = isFuture ? planOriginEntries : eatenEntries;
+  const totals = sumDayNutrition(displayEntries);
+
+  // Planned summary line — shown on today when plan mode is on and planned items exist
+  const plannedTotals = (planMode && !isFuture && planOriginEntries.length > 0)
+    ? sumDayNutrition(planOriginEntries)
+    : null;
+  // Green when every plan-origin item has been checked off; red while any remain
+  const planAdherent = planOriginEntries.length > 0 && uncheckedPlanEntries.length === 0;
+
+  const hasDisplay = displayEntries.length > 0;
+
+  // Next button disabled when the user is at the navigation limit:
+  // Plan Mode OFF → limit is today; Plan Mode ON → limit is today + MAX_FUTURE_DAYS
+  const limit = new Date();
+  limit.setDate(limit.getDate() + (planMode ? MAX_FUTURE_DAYS : 0));
+  const nextDisabled = toDateStr(date) >= toDateStr(limit);
 
   const [editingWater, setEditingWater] = useState(false);
   const [editWaterValue, setEditWaterValue] = useState('');
@@ -68,7 +97,7 @@ export default function DailySummary({
         </div>
         <button
           onClick={onNextDay}
-          disabled={isFuture}
+          disabled={nextDisabled}
           className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label="Next day"
         >
@@ -77,16 +106,32 @@ export default function DailySummary({
       </div>
 
       {/* Macro cards */}
-      {entries.length === 0 ? (
+      {!hasDisplay ? (
         <p className="text-center text-stone-400 text-sm py-4">
-          Nothing logged yet.
+          {isFuture ? 'Nothing planned yet.' : 'Nothing logged yet.'}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <MacroCard label="Calories" value={totals.calories} unit="kcal" highlight />
-          <MacroCard label="Protein" value={totals.protein} unit="g" />
-          <MacroCard label="Fat" value={totals.fat} unit="g" />
-          <MacroCard label="Fiber" value={totals.fiber} unit="g" />
+        <div className="relative pt-3">
+          <div className="grid grid-cols-2 gap-3">
+            <MacroCard label="Calories" value={totals.calories} unit="kcal" highlight isFuture={isFuture} />
+            <MacroCard label="Protein"  value={totals.protein}  unit="g"    isFuture={isFuture} />
+            <MacroCard label="Fat"      value={totals.fat}      unit="g"    isFuture={isFuture} />
+            <MacroCard label="Fiber"    value={totals.fiber}    unit="g"    isFuture={isFuture} />
+          </div>
+          {/* Diagonal corner ribbon — signals this is a planned/future view */}
+          {isFuture && <PlanCornerTag />}
+        </div>
+      )}
+
+      {/* Planned totals line — today only, Plan Mode ON, when planned items exist */}
+      {plannedTotals && (
+        <div className="flex items-center gap-1.5 mt-2 text-xs text-stone-400">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: planAdherent ? '#4ade80' : 'var(--color-rose)' }}
+            title={planAdherent ? 'All planned items eaten' : 'Some planned items remain'}
+          />
+          Planned: {plannedTotals.calories} kcal &middot; {plannedTotals.protein}g protein &middot; {plannedTotals.fat}g fat &middot; {plannedTotals.fiber}g fiber
         </div>
       )}
 
@@ -96,7 +141,7 @@ export default function DailySummary({
           href={`/detailed-summary?date=${toDateStr(date)}`}
           className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
         >
-          Detailed summary →
+          {isFuture ? 'Detailed plan →' : 'Detailed summary →'}
         </Link>
       </div>
 
@@ -153,22 +198,32 @@ export default function DailySummary({
   );
 }
 
-// Individual macro display card
+// Individual macro display card.
+// isFuture applies --color-planned-bg tint; highlight card keeps navy-mid but
+// dims slightly on future dates to match the softer planned-view palette.
 function MacroCard({
   label,
   value,
   unit,
   highlight = false,
+  isFuture = false,
 }: {
   label: string;
   value: number;
   unit: string;
   highlight?: boolean;
+  isFuture?: boolean;
 }) {
+  const bgStyle: React.CSSProperties = highlight
+    ? { backgroundColor: isFuture ? 'var(--color-navy-mid)' : 'var(--color-navy-mid)', opacity: isFuture ? 0.82 : 1 }
+    : isFuture
+    ? { backgroundColor: 'var(--color-planned-bg)' }
+    : {};
+
   return (
     <div
-      className={`rounded-xl p-3 ${highlight ? 'text-white' : 'bg-stone-50 text-stone-800'}`}
-      style={highlight ? { backgroundColor: 'var(--color-navy-mid)' } : undefined}
+      className={`rounded-xl p-3 ${highlight ? 'text-white' : 'text-stone-800'} ${!highlight && !isFuture ? 'bg-stone-50' : ''}`}
+      style={bgStyle}
     >
       <p className={`text-xs uppercase tracking-widest font-medium mb-1 ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>
         {label}
@@ -177,6 +232,37 @@ function MacroCard({
         {value}
         <span className={`text-sm font-normal ml-1 ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>{unit}</span>
       </p>
+    </div>
+  );
+}
+
+// Left-pointing chevron tag — sits above the top-right of the macro grid.
+// Chevron shape via clip-path: pointed left end (◄), straight right end.
+// Positioned just above the grid so it doesn't obscure the macro values.
+function PlanCornerTag() {
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{ right: 0, top: -12, zIndex: 2 }}
+    >
+      <div
+        style={{
+          backgroundColor: 'var(--color-navy-mid)',
+          color: 'white',
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          padding: '5px 12px 5px 18px',
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          // Chevron: left point at 50% height, right side square-rounded
+          clipPath: 'polygon(14px 0%, 100% 0%, 100% 100%, 14px 100%, 0% 50%)',
+          borderRadius: '0 4px 4px 0',
+        }}
+      >
+        As per plan
+      </div>
     </div>
   );
 }
@@ -199,7 +285,10 @@ function formatDate(d: Date): string {
 function formatDateLabel(d: Date): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
   if (toDateStr(d) === toDateStr(yesterday)) return 'Yesterday';
+  if (toDateStr(d) === toDateStr(tomorrow)) return 'Tomorrow';
   return d.toLocaleDateString('en-IN', { weekday: 'long' });
 }
 

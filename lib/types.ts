@@ -24,6 +24,10 @@ export interface NutritionPer100g {
 
 export type MealTag = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack';
 
+// Whether an entry has been eaten or is still planned.
+// All entries created before Plan Mode existed are treated as 'eaten' by default.
+export type EntryStatus = 'eaten' | 'planned';
+
 export interface FoodEntry {
   id: string;
   date: string;                // ISO date string e.g. "2024-03-12"
@@ -31,6 +35,11 @@ export interface FoodEntry {
   quantity_g: number;
   tag: MealTag | null;
   nutrition: NutritionPer100g; // always stored per 100g — actuals calculated at display time
+  // Plan Mode fields — both optional for backward compatibility with existing entries.
+  // Absence of status is treated as 'eaten' everywhere it is read.
+  status?: EntryStatus;        // 'eaten' once checked off or added directly; 'planned' when added via Plan Mode
+  planOrigin?: boolean;        // true when this entry was originally saved as planned — never changes after save.
+                               // Enables the "On the menu" to-do list to show scratched items even after check-off.
 }
 
 export interface WaterEntry {
