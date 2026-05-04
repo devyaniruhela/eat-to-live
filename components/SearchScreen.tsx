@@ -8,8 +8,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { EntryStatus, FoodSearchResult, MealTag } from '@/lib/types';
 import { MICRONUTRIENT_LABELS } from '@/lib/nutrition';
+import { getCustomFoods, customFoodToSearchResult } from '@/lib/storage';
 import AddEntryModal from '@/components/AddEntryModal';
 import SuccessToast from '@/components/SuccessToast';
+import CustomItemModal from '@/components/CustomItemModal';
 
 interface SearchScreenProps {
   onClose: () => void;
@@ -29,6 +31,7 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
   const [error, setError] = useState('');
   // null = no modal open; 'plate' = Add to plate flow; 'plan' = Add to plan flow (with date picker)
   const [modalMode, setModalMode] = useState<'plate' | 'plan' | null>(null);
+  const [showCustomModal, setShowCustomModal] = useState(false);
   // Holds the item name shown in the success toast; null = toast hidden
   const [successItem, setSuccessItem] = useState<string | null>(null);
   // Date the last save actually went to — drives the toast message
@@ -71,8 +74,14 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
 
   async function fetchResults(q: string) {
     const key = q.trim().toLowerCase();
+
+    // Prepend matching custom foods before API results — checked first in the pipeline
+    const customMatches = getCustomFoods()
+      .filter((cf) => cf.name.toLowerCase().includes(key))
+      .map(customFoodToSearchResult);
+
     if (cache.current.has(key)) {
-      setResults(cache.current.get(key)!);
+      setResults([...customMatches, ...cache.current.get(key)!]);
       return;
     }
     setLoading(true);
@@ -82,7 +91,7 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       cache.current.set(key, data.results);
-      setResults(data.results);
+      setResults([...customMatches, ...data.results]);
     } catch {
       setError('Could not fetch results. Check your connection.');
     } finally {
@@ -177,6 +186,17 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
 
         {error && <p className="text-xs mb-3" style={{ color: 'var(--color-rose)' }}>{error}</p>}
 
+        {/* "Add a custom food" entry point — shown when query is empty and no food is selected */}
+        {!selected && query.length < 2 && (
+          <button
+            onClick={() => setShowCustomModal(true)}
+            className="w-full flex items-center justify-between px-4 py-3 mb-4 rounded-xl border border-dashed border-stone-300 hover:border-stone-400 bg-card text-left transition-colors"
+          >
+            <span className="text-sm text-stone-500">Can&apos;t find it? Add a custom food</span>
+            <span className="text-stone-400 text-base leading-none">+</span>
+          </button>
+        )}
+
         {/* Search results dropdown */}
         {results.length > 0 && (
           <div className="border border-stone-200 rounded-xl overflow-hidden mb-6 divide-y divide-stone-100 bg-card">
@@ -186,7 +206,17 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
                 onClick={() => handleSelect(food)}
                 className="w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex items-center justify-between gap-3"
               >
-                <p className="text-sm font-medium text-stone-800">{food.name}</p>
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className="text-sm font-medium text-stone-800 truncate">{food.name}</p>
+                  {food.isCustom && (
+                    <span
+                      className="shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-md"
+                      style={{ backgroundColor: 'var(--color-planned-bg)', color: 'var(--color-navy-mid)' }}
+                    >
+                      Custom
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-stone-400 shrink-0">{food.nutrition.calories} kcal</p>
               </button>
             ))}
@@ -259,7 +289,9 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
             </div>
 
             <p className="text-xs text-stone-300 text-center mt-6 pb-4">
-              Values from {selected.fdcId < 10000 ? 'IFCT 2017' : 'USDA FoodData Central'}
+              {selected.isCustom
+                ? 'Your custom food'
+                : `Values from ${selected.fdcId < 10000 ? 'IFCT 2017' : 'USDA FoodData Central'}`}
             </p>
           </div>
         )}
@@ -293,6 +325,17 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
           planMode={true}
           isFuture={false}
           showDatePicker={true}
+        />
+      )}
+
+      {/* Custom food modal — scan label or manual entry flow */}
+      {showCustomModal && (
+        <CustomItemModal
+          onSaved={(food) => {
+            setShowCustomModal(false);
+            handleSelect(food); // auto-select the new food so user can log it immediately
+          }}
+          onClose={() => setShowCustomModal(false)}
         />
       )}
 

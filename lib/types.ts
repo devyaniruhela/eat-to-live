@@ -53,4 +53,19 @@ export interface FoodSearchResult {
   fdcId: number;      // USDA ID, or a stable numeric hash for Indian food JSON items
   name: string;
   nutrition: NutritionPer100g;
+  isCustom?: boolean; // true when this result came from the user's saved custom foods
+}
+
+// A user-defined food item saved from a label scan or manual entry.
+// nutrition is Partial — absent fields mean "unknown", not zero.
+// When used in calculations, absent fields contribute 0 (same as any unfilled database entry).
+// submittedForReview is set on save and used during the Supabase migration sprint
+// to sync all custom foods to the backend for admin QC.
+export interface CustomFood {
+  id: string;           // prefixed 'custom_TIMESTAMP-random' — namespaced from USDA fdcIds
+  name: string;
+  nutrition: Partial<NutritionPer100g>;
+  createdAt: string;    // ISO date string, e.g. "2026-04-23"
+  source: 'label-scan' | 'manual';
+  submittedForReview: boolean; // always true — all custom foods are flagged for QC
 }

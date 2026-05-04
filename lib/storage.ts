@@ -7,10 +7,11 @@
 //   unconfirmEntry(id) — reverts a checked-off entry back to planned (status: 'eaten' → 'planned')
 //   getRecentFoods     — filters to eaten entries only; planned items excluded from quick-add pills
 
-import { FoodEntry, WaterEntry } from './types';
+import { CustomFood, FoodEntry, FoodSearchResult, NutritionPer100g, WaterEntry } from './types';
 
 const ENTRIES_KEY = 'etl_food_entries';
 const WATER_KEY = 'etl_water_entries';
+const CUSTOM_FOODS_KEY = 'etl_custom_foods';
 
 // --- Food Entries ---
 
@@ -151,6 +152,58 @@ export function getRecentFoods(limit = 5, days = 3): import('./types').FoodSearc
   }
 
   return results;
+}
+
+// --- Custom Foods ---
+
+/** Returns all user-saved custom foods. */
+export function getCustomFoods(): CustomFood[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOM_FOODS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Saves a new custom food. Prepends so the most recent item appears first in search.
+ * submittedForReview is always true — flagged for Supabase QC sync during the auth sprint.
+ */
+export function saveCustomFood(food: CustomFood): void {
+  const all = getCustomFoods();
+  all.unshift(food);
+  localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(all));
+}
+
+/**
+ * Converts a CustomFood to a FoodSearchResult so it can be used anywhere a search
+ * result is expected (AddEntryModal, logging, etc.). Absent nutrition fields default
+ * to 0 — they contribute nothing to macro totals, which is the correct behaviour
+ * for unknown values.
+ */
+export function customFoodToSearchResult(cf: CustomFood): FoodSearchResult {
+  // Derive a stable numeric id from the timestamp portion of the custom id
+  // so it can be used as a React key and never collides with USDA fdcIds.
+  const numericId = parseInt(cf.id.replace('custom_', '').split('-')[0], 10) || 0;
+  const zero: NutritionPer100g = {
+    calories: 0, protein: 0, fat: 0, carbs: 0, fiber: 0,
+    calcium: 0, iron: 0, magnesium: 0, potassium: 0, zinc: 0,
+    vitamin_a: 0, vitamin_b12: 0, vitamin_c: 0, vitamin_d: 0,
+  };
+  return {
+    fdcId: numericId,
+    name: cf.name,
+    nutrition: { ...zero, ...Object.fromEntries(
+      Object.entries(cf.nutrition).filter(([, v]) => v !== undefined)
+    ) } as NutritionPer100g,
+    isCustom: true,
+  };
+}
+
+/** Generates a namespaced ID for custom foods — distinct from USDA fdcIds. */
+export function generateCustomId(): string {
+  return `custom_${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 // --- Utility ---
