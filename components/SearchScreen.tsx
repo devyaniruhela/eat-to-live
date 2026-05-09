@@ -186,8 +186,8 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
 
         {error && <p className="text-xs mb-3" style={{ color: 'var(--color-rose)' }}>{error}</p>}
 
-        {/* "Add a custom food" entry point — shown when query is empty and no food is selected */}
-        {!selected && query.length < 2 && (
+        {/* "Add a custom food" entry point — shown whenever no food is selected (query may be active with bad/zero results) */}
+        {!selected && (
           <button
             onClick={() => setShowCustomModal(true)}
             className="w-full flex items-center justify-between px-4 py-3 mb-4 rounded-xl border border-dashed border-stone-300 hover:border-stone-400 bg-card text-left transition-colors"
@@ -290,7 +290,7 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
 
             <p className="text-xs text-stone-300 text-center mt-6 pb-4">
               {selected.isCustom
-                ? 'Your custom food'
+                ? '⭐️ Added by you'
                 : `Values from ${selected.fdcId < 10000 ? 'IFCT 2017' : 'USDA FoodData Central'}`}
             </p>
           </div>

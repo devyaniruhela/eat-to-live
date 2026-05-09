@@ -29,16 +29,21 @@ export function validateCustomFood(
     errors.push('Name must be at least 3 characters.');
   }
 
-  // Fuzzy duplicate check: exact case-insensitive match against saved names
+  // Duplicate name: case-insensitive match — same name not allowed, prompt user to add a modifier
   const normalized = name.trim().toLowerCase();
   const dupe = existing.find((f) => f.name.toLowerCase() === normalized);
   if (dupe) {
-    warnings.push(`You already have "${dupe.name}" saved as a custom food.`);
+    errors.push(`"${dupe.name}" is already saved. Add a modifier to make it unique, e.g. "${dupe.name} (homemade)".`);
   }
 
   // --- Nutrition checks (only run when values are provided) ---
 
   const { calories, protein, fat, carbs, fiber } = nutrition;
+
+  // Calories are required — macros alone aren't enough to log accurately
+  if (calories === undefined) {
+    errors.push('Calories are required.');
+  }
 
   // No negative values
   const provided = Object.values(nutrition).filter((v): v is number => v !== undefined);
@@ -47,12 +52,12 @@ export function validateCustomFood(
   }
 
   // Per-100g sanity: the sum of protein + fat + carbs cannot exceed 100g
-  // (water, ash, and other components make up the difference)
+  // (water, ash, and other components make up the rest)
   if (protein !== undefined && fat !== undefined && carbs !== undefined) {
     const macroSum = protein + fat + carbs;
     if (macroSum > 100) {
-      warnings.push(
-        `Protein + fat + carbs add up to ${macroSum.toFixed(1)}g, which exceeds 100g. Check the label.`
+      errors.push(
+        `Protein + fat + carbs add up to ${macroSum.toFixed(1)}g, which exceeds 100g per 100g of food. Check the label.`
       );
     }
   }
@@ -83,7 +88,7 @@ export function validateCustomFood(
 
   // Fiber cannot exceed total carbs (fiber is a subset of carbohydrates)
   if (fiber !== undefined && carbs !== undefined && fiber > carbs) {
-    warnings.push(`Fiber (${fiber}g) is higher than total carbs (${carbs}g). Check the label.`);
+    errors.push(`Fiber (${fiber}g) cannot be more than total carbs (${carbs}g). Check the label.`);
   }
 
   return { errors, warnings };

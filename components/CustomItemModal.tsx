@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { CustomFood, FoodSearchResult, NutritionPer100g } from '@/lib/types';
 import {
   getCustomFoods,
@@ -69,7 +69,18 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [nameError, setNameError] = useState('');
+  // Tracks whether the user has seen warnings and clicked Save once — next click proceeds.
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false);
 
+  // True on mobile — camera scan option shown only when device has a camera.
+  // Detected once on mount via touch capability; SSR-safe (defaults false).
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    setIsMobile(typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+  }, []);
+
+  // Two file inputs: one opens the camera (mobile only), one opens the file picker.
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -160,14 +171,15 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
   }
 
   function handleRetry() {
+    // Return to the choose step so user picks a fresh image rather than re-scanning the same file
     setScanError('');
-    fileInputRef.current!.value = '';
-    fileInputRef.current?.click();
+    setStep('choose');
   }
 
-  // Updates a single nutrition field string value
+  // Updates a single nutrition field — also resets warning acknowledgement so user must re-confirm
   function setField(key: keyof NutritionPer100g, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
+    setWarningsAcknowledged(false);
   }
 
   // Parses the string fields into a Partial<NutritionPer100g> for storage.
@@ -192,7 +204,13 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
     setErrors(errs);
     setWarnings(warns);
 
-    if (errs.length > 0) return; // block save on hard errors
+    if (errs.length > 0) return;
+
+    // First save attempt with warnings: show them and wait for the user to confirm
+    if (warns.length > 0 && !warningsAcknowledged) {
+      setWarningsAcknowledged(true);
+      return;
+    }
 
     // Normalize name to title case before saving
     const normalizedName = trimmedName
@@ -240,15 +258,29 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
               How would you like to add this food?
             </p>
 
-            {/* Scan label */}
+            {/* Camera scan — mobile only (desktop has no camera to open) */}
+            {isMobile && (
+              <button
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex items-center gap-4 p-5 rounded-2xl border-2 border-stone-200 hover:border-stone-300 bg-card transition-colors text-left"
+              >
+                <span className="text-3xl" aria-hidden="true">📷</span>
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">Scan nutrition label</p>
+                  <p className="text-xs text-stone-400 mt-0.5">Use your camera to scan the label</p>
+                </div>
+              </button>
+            )}
+
+            {/* File picker — available on both mobile and desktop */}
             <button
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-4 p-5 rounded-2xl border-2 border-stone-200 hover:border-stone-300 bg-card transition-colors text-left"
             >
-              <span className="text-3xl" aria-hidden="true">📷</span>
+              <span className="text-3xl" aria-hidden="true">🖼️</span>
               <div>
-                <p className="text-sm font-semibold text-stone-800">Scan nutrition label</p>
-                <p className="text-xs text-stone-400 mt-0.5">Take a photo or upload an image</p>
+                <p className="text-sm font-semibold text-stone-800">Upload a photo</p>
+                <p className="text-xs text-stone-400 mt-0.5">Pick an image of the nutrition label</p>
               </div>
             </button>
 
@@ -264,12 +296,20 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
               </div>
             </button>
 
-            {/* Hidden file input — capture="environment" opens back camera on mobile */}
+            {/* Camera input — opens back camera directly (mobile only) */}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            {/* File picker input — opens gallery/file browser (no capture attribute) */}
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -362,7 +402,7 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
                   type="text"
                   placeholder="e.g. Protein Bar XYZ"
                   value={name}
-                  onChange={(e) => { setName(e.target.value); setNameError(''); }}
+                  onChange={(e) => { setName(e.target.value); setNameError(''); setWarningsAcknowledged(false); }}
                   className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-white text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none focus:border-navy"
                   style={{ '--tw-ring-color': 'rgba(26,39,68,0.2)' } as React.CSSProperties}
                 />
@@ -423,42 +463,39 @@ export default function CustomItemModal({ onSaved, onClose }: CustomItemModalPro
                 )}
               </div>
 
-              {/* Validation errors — block save */}
+            </div>
+
+            {/* Sticky footer — errors and warnings pinned here so they're always visible on save */}
+            <div className="border-t border-stone-100 px-4 pt-3 pb-4 bg-card">
               {errors.length > 0 && (
-                <div className="rounded-xl p-3 space-y-1" style={{ backgroundColor: 'rgba(200,112,128,0.08)' }}>
+                <div className="mb-3 rounded-xl p-3 space-y-1" style={{ backgroundColor: 'rgba(200,112,128,0.08)' }}>
                   {errors.map((e, i) => (
-                    <p key={i} className="text-xs font-medium" style={{ color: 'var(--color-rose)' }}>
-                      {e}
-                    </p>
+                    <p key={i} className="text-xs font-medium" style={{ color: 'var(--color-rose)' }}>{e}</p>
                   ))}
                 </div>
               )}
-
-              {/* Validation warnings — informational only */}
               {warnings.length > 0 && (
-                <div className="rounded-xl p-3 space-y-1 bg-amber-50 border border-amber-100">
+                <div className="mb-3 rounded-xl p-3 space-y-1 bg-amber-50 border border-amber-100">
                   {warnings.map((w, i) => (
                     <p key={i} className="text-xs text-amber-700">{w}</p>
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Sticky footer */}
-            <div className="border-t border-stone-100 px-4 py-4 flex gap-3 bg-card">
-              <button
-                onClick={onClose}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold text-stone-500 border border-stone-200 hover:bg-stone-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ backgroundColor: 'var(--color-navy)' }}
-              >
-                Save custom food
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-stone-500 border border-stone-200 hover:bg-stone-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: 'var(--color-navy)' }}
+                >
+                  {warningsAcknowledged && warnings.length > 0 ? 'Save anyway' : 'Save custom food'}
+                </button>
+              </div>
             </div>
           </>
         )}
