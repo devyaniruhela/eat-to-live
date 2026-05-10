@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { EntryStatus, FoodSearchResult, MealTag } from '@/lib/types';
 import { calculateNutrition, MICRONUTRIENT_LABELS } from '@/lib/nutrition';
-import { getRecentFoods, toDateString } from '@/lib/storage';
+import { getRecentFoods, toDateString, getCustomFoods, customFoodToSearchResult } from '@/lib/storage';
 
 interface AddEntryModalProps {
   onSave: (result: FoodSearchResult, quantity: number, tag: MealTag | null, status: EntryStatus, planOrigin: boolean, targetDate?: string) => void;
@@ -116,9 +116,13 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
   async function fetchResults(q: string) {
     const key = q.trim().toLowerCase();
 
-    // Return cached results immediately if we've searched this before
+    // Custom foods always checked first — no API call needed for them
+    const customMatches = getCustomFoods()
+      .filter((cf) => cf.name.toLowerCase().includes(key))
+      .map(customFoodToSearchResult);
+
     if (cache.current.has(key)) {
-      setResults(cache.current.get(key)!);
+      setResults([...customMatches, ...cache.current.get(key)!]);
       return;
     }
 
@@ -129,7 +133,7 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       cache.current.set(key, data.results); // store for reuse
-      setResults(data.results);
+      setResults([...customMatches, ...data.results]);
     } catch {
       setError('Could not fetch results. Check your connection.');
     } finally {
@@ -149,8 +153,9 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
   function handleSave() {
     if (!selected || !quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) return;
     const status: EntryStatus = isPlanEntry ? 'planned' : 'eaten';
-    // planOrigin is true only when the entry is saved as planned — records its plan history forever
-    const planOrigin = isPlanEntry;
+    // planOrigin records whether this entry was added via plan mode — true even if "Mark as eaten"
+    // was checked, so eaten items still appear (struck through) in the plan view.
+    const planOrigin = showDatePicker ? true : isFuture ? true : planMode && !isPast;
     // targetDate only set from the date picker path; otherwise parent uses its current date
     const targetDate = showDatePicker ? selectedPlanDate : undefined;
     onSave(selected, Number(quantity), tag, status, planOrigin, targetDate);
@@ -266,7 +271,17 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
                   onClick={() => handleSelect(food)}
                   className="w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex items-center justify-between gap-3"
                 >
-                  <p className="text-sm font-medium text-stone-800">{food.name}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-sm font-medium text-stone-800 truncate">{food.name}</p>
+                    {food.isCustom && (
+                      <span
+                        className="shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-md"
+                        style={{ backgroundColor: 'var(--color-planned-bg)', color: 'var(--color-navy-mid)' }}
+                      >
+                        Custom
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-stone-400 shrink-0">{food.nutrition.calories} kcal</p>
                 </button>
               ))}
