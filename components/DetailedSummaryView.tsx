@@ -37,6 +37,7 @@ interface DetailedSummaryViewProps {
 const MACRO_KEYS: Array<{ key: keyof NutritionPer100g; label: string; unit: string }> = [
   { key: 'calories', label: 'Calories', unit: 'kcal' },
   { key: 'protein',  label: 'Protein',  unit: 'g'    },
+  { key: 'carbs',    label: 'Carbs',    unit: 'g'    },
   { key: 'fat',      label: 'Fat',      unit: 'g'    },
   { key: 'fiber',    label: 'Fiber',    unit: 'g'    },
 ];
@@ -268,16 +269,29 @@ export default function DetailedSummaryView({ initialDate }: DetailedSummaryView
             </div>
           )}
 
-          {/* Macro cards — tappable when entries exist */}
-          <div className="relative overflow-hidden rounded-xl mt-3">
-            <div className="grid grid-cols-2 gap-3">
-              {MACRO_KEYS.map(({ key, label, unit }, i) => (
+          {/* Macro cards — Calories full-width on top, remaining four in 2×2 below */}
+          <div className="relative mt-3">
+            {/* Calories — full-width, space beside reserved for future insights */}
+            <MacroCard
+              key="calories"
+              label="Calories"
+              value={hasEntries ? totals.calories : null}
+              unit="kcal"
+              highlight
+              isFuture={isFuture}
+              isSelected={expandedMacro === 'calories'}
+              onClick={hasEntries ? () => toggleMacro('calories') : undefined}
+              fullWidth
+            />
+            {/* 2×2 grid for Protein, Carbs, Fat, Fiber */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              {MACRO_KEYS.filter(({ key }) => key !== 'calories').map(({ key, label, unit }) => (
                 <MacroCard
                   key={key}
                   label={label}
                   value={hasEntries ? totals[key] as number : null}
                   unit={unit}
-                  highlight={i === 0}
+                  highlight={false}
                   isFuture={isFuture}
                   isSelected={expandedMacro === key}
                   onClick={hasEntries ? () => toggleMacro(key) : undefined}
@@ -440,7 +454,7 @@ function Chevron({ open }: { open: boolean }) {
  * a small chevron in the label row signals this affordance.
  */
 function MacroCard({
-  label, value, unit, highlight = false, isFuture = false, isSelected = false, onClick,
+  label, value, unit, highlight = false, isFuture = false, isSelected = false, onClick, fullWidth = false,
 }: {
   label: string;
   value: number | null;
@@ -449,6 +463,8 @@ function MacroCard({
   isFuture?: boolean;
   isSelected?: boolean;
   onClick?: () => void;
+  // When true, renders as a block-level element spanning full width (used for Calories above the 2×2 grid)
+  fullWidth?: boolean;
 }) {
   const bgStyle: React.CSSProperties = highlight
     ? { backgroundColor: 'var(--color-navy-mid)', opacity: isFuture ? 0.82 : 1 }

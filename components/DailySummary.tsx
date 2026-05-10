@@ -112,11 +112,14 @@ export default function DailySummary({
         </p>
       ) : (
         <div className="relative pt-3">
-          <div className="grid grid-cols-2 gap-3">
-            <MacroCard label="Calories" value={totals.calories} unit="kcal" highlight isFuture={isFuture} />
-            <MacroCard label="Protein"  value={totals.protein}  unit="g"    isFuture={isFuture} />
-            <MacroCard label="Fat"      value={totals.fat}      unit="g"    isFuture={isFuture} />
-            <MacroCard label="Fiber"    value={totals.fiber}    unit="g"    isFuture={isFuture} />
+          {/* Calories full-width on top — space beside it reserved for future insights */}
+          <MacroCard label="Calories" value={totals.calories} unit="kcal" highlight isFuture={isFuture} fullWidth />
+          {/* 2×2 grid for remaining macros */}
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <MacroCard label="Protein" value={totals.protein} unit="g" isFuture={isFuture} />
+            <MacroCard label="Carbs"   value={totals.carbs}   unit="g" isFuture={isFuture} />
+            <MacroCard label="Fat"     value={totals.fat}     unit="g" isFuture={isFuture} />
+            <MacroCard label="Fiber"   value={totals.fiber}   unit="g" isFuture={isFuture} />
           </div>
           {/* Diagonal corner ribbon — signals this is a planned/future view */}
           {isFuture && <PlanCornerTag />}
@@ -207,12 +210,15 @@ function MacroCard({
   unit,
   highlight = false,
   isFuture = false,
+  fullWidth = false,
 }: {
   label: string;
   value: number;
   unit: string;
   highlight?: boolean;
   isFuture?: boolean;
+  // When true, renders as a full-width block (used for the Calories card above the 2×2 grid)
+  fullWidth?: boolean;
 }) {
   const bgStyle: React.CSSProperties = highlight
     ? { backgroundColor: isFuture ? 'var(--color-navy-mid)' : 'var(--color-navy-mid)', opacity: isFuture ? 0.82 : 1 }
@@ -222,7 +228,7 @@ function MacroCard({
 
   return (
     <div
-      className={`rounded-xl p-3 ${highlight ? 'text-white' : 'text-stone-800'} ${!highlight && !isFuture ? 'bg-stone-50' : ''}`}
+      className={`rounded-xl p-3 ${highlight ? 'text-white' : 'text-stone-800'} ${!highlight && !isFuture ? 'bg-stone-50' : ''} ${fullWidth ? 'mb-0' : ''}`}
       style={bgStyle}
     >
       <p className={`text-xs uppercase tracking-widest font-medium mb-1 ${highlight ? 'text-blue-100' : 'text-stone-400'}`}>

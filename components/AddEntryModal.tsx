@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { EntryStatus, FoodSearchResult, MealTag } from '@/lib/types';
 import { calculateNutrition, MICRONUTRIENT_LABELS } from '@/lib/nutrition';
 import { getRecentFoods, toDateString, getCustomFoods, customFoodToSearchResult } from '@/lib/storage';
+import CustomItemModal from '@/components/CustomItemModal';
 
 interface AddEntryModalProps {
   onSave: (result: FoodSearchResult, quantity: number, tag: MealTag | null, status: EntryStatus, planOrigin: boolean, targetDate?: string) => void;
@@ -53,6 +54,7 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
   // "Mark as eaten" checkbox — only shown in Plan Mode on today (not future dates or date picker flow).
   // Unchecked = save as planned; checked = save as eaten directly.
   const [markAsEaten, setMarkAsEaten] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
   // Selected date for the plan date picker — defaults to today, user can pick up to +14 days.
   // Only relevant when showDatePicker=true (opened from Search → "Add to plan").
   const [selectedPlanDate, setSelectedPlanDate] = useState(() => toDateString(new Date()));
@@ -238,7 +240,7 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
             )}
           </div>
 
-          {/* Quick add pills — shown only when search is empty and no food selected yet */}
+          {/* Quick add pills — shown when search is empty and no food selected */}
           {!selected && !query && recentFoods.length > 0 && (
             <div className="mb-4">
               <p className="text-xs text-stone-400 font-medium uppercase tracking-wider mb-2">
@@ -286,6 +288,19 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
                 </button>
               ))}
             </div>
+          )}
+
+          {/* "+Custom item" chip — persistent until a food is selected.
+              Sits below results (or below quick add in empty state) so user can always
+              add something not found, even when search returns partial results. */}
+          {!selected && (
+            <button
+              onClick={() => setShowCustomModal(true)}
+              className="flex items-center gap-1.5 mb-4 px-3 py-1.5 rounded-full text-sm font-medium border border-dashed border-stone-300 bg-card text-stone-500 hover:border-stone-400 transition-colors"
+            >
+              <span>+</span>
+              Custom item
+            </button>
           )}
 
           {/* Quantity input — only shown after selecting a food */}
@@ -421,6 +436,18 @@ export default function AddEntryModal({ onSave, onClose, initialFood, planMode =
         </div>
 
       </div>
+
+      {/* Custom item modal — renders on top when user taps the "+Custom item" quick-add chip.
+          On save the new food is auto-selected so the user can log it immediately. */}
+      {showCustomModal && (
+        <CustomItemModal
+          onSaved={(food) => {
+            setShowCustomModal(false);
+            handleSelect(food);
+          }}
+          onClose={() => setShowCustomModal(false)}
+        />
+      )}
     </div>
   );
 }
