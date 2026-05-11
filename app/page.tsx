@@ -167,8 +167,8 @@ export default function HomePage() {
   }
 
   // Swipe left = next day, swipe right = prev day — same as the arrow buttons
-  // 30ms haptic pulse on date swipe — lighter than delete (navigation, not destruction)
-  const swipeHandlers = useSwipe({ onSwipeLeft: goToNextDay, onSwipeRight: goToPrevDay, hapticMs: 30 });
+  // 60ms haptic pulse on date swipe — lighter than delete (navigation, not destruction)
+  const swipeHandlers = useSwipe({ onSwipeLeft: goToNextDay, onSwipeRight: goToPrevDay, hapticMs: 60 });
 
   return (
     <div className={`max-w-md mx-auto px-4 pb-36 ${isFuture ? 'future-plan-tint' : ''}`} {...swipeHandlers}>

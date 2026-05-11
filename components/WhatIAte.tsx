@@ -103,7 +103,7 @@ function EntryRow({
     stopPropagation: true,
     onSwipeProgress: handleDragProgress,
     onSwipeCancel: handleDragCancel,
-    hapticMs: 40,
+    hapticMs: 80,
   });
   const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
 
@@ -234,7 +234,7 @@ function PlannedEntryRow({
     stopPropagation: true,
     onSwipeProgress: handleDragProgress,
     onSwipeCancel: handleDragCancel,
-    hapticMs: 40,
+    hapticMs: 80,
   });
   const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
   const isChecked = entry.status === 'eaten';

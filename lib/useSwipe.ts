@@ -84,8 +84,9 @@ export function useSwipe({
       return;
     }
 
-    // Fire haptic before state changes so it feels simultaneous with the action
-    if (hapticMs && typeof navigator !== 'undefined' && navigator.vibrate) {
+    // Fire haptic before state changes so it feels simultaneous with the action.
+    // navigator.vibrate is Android-only — iOS silently ignores it.
+    if (hapticMs && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate(hapticMs);
     }
 
