@@ -26,12 +26,31 @@ interface UseSwipeOptions {
    * swipes a row.
    */
   stopPropagation?: boolean;
+  /**
+   * Called every touchmove with the raw horizontal delta (px).
+   * Use this to drive a live drag-reveal effect (e.g. red delete panel).
+   * Only fires when the gesture is more horizontal than vertical.
+   */
+  onSwipeProgress?: (dx: number) => void;
+  /**
+   * Called when the touch ends without reaching the swipe threshold.
+   * Use this to snap the row back to its resting position.
+   */
+  onSwipeCancel?: () => void;
+  /**
+   * Vibration duration (ms) fired on a completed swipe via navigator.vibrate().
+   * Silently ignored on iOS and desktop. Omit to disable.
+   */
+  hapticMs?: number;
 }
 
 export function useSwipe({
   onSwipeLeft,
   onSwipeRight,
   stopPropagation = false,
+  onSwipeProgress,
+  onSwipeCancel,
+  hapticMs,
 }: UseSwipeOptions) {
   const startX = useRef(0);
   const startY = useRef(0);
@@ -42,6 +61,17 @@ export function useSwipe({
     startY.current = e.touches[0].clientY;
   }
 
+  function onTouchMove(e: React.TouchEvent) {
+    if (stopPropagation) e.stopPropagation();
+    if (!onSwipeProgress) return;
+    const dx = e.touches[0].clientX - startX.current;
+    const dy = e.touches[0].clientY - startY.current;
+    // Only report horizontal progress — ignore if the gesture is mostly vertical
+    if (Math.abs(dx) > 0 && Math.abs(dy) / Math.abs(dx) < SWIPE_CONFIG.maxVerticalRatio) {
+      onSwipeProgress(dx);
+    }
+  }
+
   function onTouchEnd(e: React.TouchEvent) {
     if (stopPropagation) e.stopPropagation();
     const dx = e.changedTouches[0].clientX - startX.current;
@@ -49,12 +79,19 @@ export function useSwipe({
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
 
-    if (absDx < SWIPE_CONFIG.minDistance) return;
-    if (absDy / absDx > SWIPE_CONFIG.maxVerticalRatio) return;
+    if (absDx < SWIPE_CONFIG.minDistance || absDy / absDx > SWIPE_CONFIG.maxVerticalRatio) {
+      onSwipeCancel?.();
+      return;
+    }
+
+    // Fire haptic before state changes so it feels simultaneous with the action
+    if (hapticMs && typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(hapticMs);
+    }
 
     if (dx < 0) onSwipeLeft?.();
     else onSwipeRight?.();
   }
 
-  return { onTouchStart, onTouchEnd };
+  return { onTouchStart, onTouchMove, onTouchEnd };
 }

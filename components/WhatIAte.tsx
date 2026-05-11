@@ -72,13 +72,56 @@ interface EntryRowProps {
 function EntryRow({
   entry, isNew, isEditing, editQty, onEditQtyChange, onSave, onCancel, onStartEdit, onDelete,
 }: EntryRowProps) {
-  const swipeHandlers = useSwipe({ onSwipeLeft: onDelete, stopPropagation: true });
+  // Ref for the sliding content layer — manipulated directly during drag to avoid re-renders
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Called each touchmove frame — slides the content left to reveal the red panel
+  function handleDragProgress(dx: number) {
+    if (dx >= 0 || !rowRef.current) return;
+    rowRef.current.style.transition = 'none';
+    // Cap at -80px so the trash icon is fully visible before the threshold
+    rowRef.current.style.transform = `translateX(${Math.max(dx, -80)}px)`;
+  }
+
+  // Snap back with a short ease-out when the swipe doesn't reach the threshold
+  function handleDragCancel() {
+    if (!rowRef.current) return;
+    rowRef.current.style.transition = 'transform 200ms ease-out';
+    rowRef.current.style.transform = 'translateX(0)';
+  }
+
+  // Slide fully off-screen then fire delete so the parent can remove the entry
+  function handleSwipeDelete() {
+    if (!rowRef.current) return;
+    rowRef.current.style.transition = 'transform 180ms ease-in';
+    rowRef.current.style.transform = 'translateX(-110%)';
+    setTimeout(onDelete, 180);
+  }
+
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: handleSwipeDelete,
+    stopPropagation: true,
+    onSwipeProgress: handleDragProgress,
+    onSwipeCancel: handleDragCancel,
+    hapticMs: 40,
+  });
   const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
 
   return (
-    <div
-      className={`py-2 border-b border-stone-50 last:border-0 ${isNew ? 'animate-pop-in' : ''}`}
-      {...swipeHandlers}
+    // Outer wrapper clips the sliding content so the red panel doesn't overflow the card
+    <div className={`relative overflow-hidden border-b border-stone-50 last:border-0 ${isNew ? 'animate-pop-in' : ''}`}>
+      {/* Red delete panel — sits behind the content, revealed as the row slides left */}
+      <div
+        className="absolute inset-0 flex items-center justify-end px-4"
+        style={{ backgroundColor: 'var(--color-rose)' }}
+        aria-hidden="true"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2 4h12M6 4V2.5A.5.5 0 016.5 2h3a.5.5 0 01.5.5V4M13 4l-.867 8.664A1 1 0 0111.14 13.6H4.86a1 1 0 01-.993-.936L3 4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      {/* Sliding content layer */}
+      <div ref={rowRef} className="relative py-2" style={{ backgroundColor: 'var(--color-card)' }} {...swipeHandlers}
     >
       {isEditing ? (
         <div>
@@ -135,6 +178,7 @@ function EntryRow({
           </button>
         </div>
       )}
+      </div>{/* end sliding content layer */}
     </div>
   );
 }
@@ -164,7 +208,34 @@ function PlannedEntryRow({
   entry, isFuture, isScratching, isEditing, editQty, onEditQtyChange,
   onSave, onCancel, onStartEdit, onDelete, onConfirm, onUnconfirm,
 }: PlannedEntryRowProps) {
-  const swipeHandlers = useSwipe({ onSwipeLeft: onDelete, stopPropagation: true });
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  function handleDragProgress(dx: number) {
+    if (dx >= 0 || !rowRef.current) return;
+    rowRef.current.style.transition = 'none';
+    rowRef.current.style.transform = `translateX(${Math.max(dx, -80)}px)`;
+  }
+
+  function handleDragCancel() {
+    if (!rowRef.current) return;
+    rowRef.current.style.transition = 'transform 200ms ease-out';
+    rowRef.current.style.transform = 'translateX(0)';
+  }
+
+  function handleSwipeDelete() {
+    if (!rowRef.current) return;
+    rowRef.current.style.transition = 'transform 180ms ease-in';
+    rowRef.current.style.transform = 'translateX(-110%)';
+    setTimeout(onDelete, 180);
+  }
+
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: handleSwipeDelete,
+    stopPropagation: true,
+    onSwipeProgress: handleDragProgress,
+    onSwipeCancel: handleDragCancel,
+    hapticMs: 40,
+  });
   const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
   const isChecked = entry.status === 'eaten';
   const [showTooltip, setShowTooltip] = useState(false);
@@ -192,10 +263,24 @@ function PlannedEntryRow({
   }
 
   return (
-    <div
-      className={`py-2 border-b border-stone-100 last:border-0 relative ${isScratching ? 'animate-scratch' : ''}`}
-      {...swipeHandlers}
-    >
+    <div className="relative overflow-hidden border-b border-stone-100 last:border-0">
+      {/* Red delete panel — revealed as the content slides left on swipe */}
+      <div
+        className="absolute inset-0 flex items-center justify-end px-4"
+        style={{ backgroundColor: 'var(--color-rose)' }}
+        aria-hidden="true"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2 4h12M6 4V2.5A.5.5 0 016.5 2h3a.5.5 0 01.5.5V4M13 4l-.867 8.664A1 1 0 0111.14 13.6H4.86a1 1 0 01-.993-.936L3 4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      {/* Sliding content layer */}
+      <div
+        ref={rowRef}
+        className={`relative py-2 ${isScratching ? 'animate-scratch' : ''}`}
+        style={{ backgroundColor: 'var(--color-card)' }}
+        {...swipeHandlers}
+      >
       {isEditing ? (
         <div className="pl-7">
           <p className={`text-sm font-medium capitalize mb-2 ${isChecked ? 'text-stone-400 line-through' : 'text-stone-700'}`}>
@@ -276,6 +361,7 @@ function PlannedEntryRow({
           Come back on {formatEntryDate(entry.date)} to mark this as eaten
         </div>
       )}
+      </div>{/* end sliding content layer */}
     </div>
   );
 }
