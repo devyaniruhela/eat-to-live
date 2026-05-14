@@ -24,6 +24,25 @@ export interface NutritionPer100g {
 
 export type MealTag = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack';
 
+// Which repeat schedule the user has chosen in the "Repeat this food" picker.
+// 'anchor'  — add to the single anchor date (labelled "Tomorrow", "Today", etc. by context)
+// 'week'    — add to a 7-day window starting from anchor (labelled "This week" / "Coming week")
+// 'weekly'  — add to every occurrence of the same weekday within 30 days from anchor
+// 'custom'  — user picks individual dates from the calendar
+export type RecurrenceMode = 'anchor' | 'week' | 'weekly' | 'custom';
+
+// Which scenario is generating the picker — determines anchor date and pill labels.
+// add-*    : used inside AddEntryModal (adding a new item)
+// repeat-* : used inside RepeatSheet (repeating an existing saved entry)
+// The suffix encodes the date relationship between the primary entry and today.
+export type RepeatContext =
+  | 'add-today'     // Adding to today's date
+  | 'add-past'      // Adding to a past date
+  | 'add-future'    // Adding to a future date
+  | 'repeat-past'   // Repeating an entry whose date is in the past
+  | 'repeat-today'  // Repeating an entry logged today
+  | 'repeat-future';// Repeating an entry planned for a future date
+
 // Whether an entry has been eaten or is still planned.
 // All entries created before Plan Mode existed are treated as 'eaten' by default.
 export type EntryStatus = 'eaten' | 'planned';

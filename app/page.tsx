@@ -4,13 +4,14 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSwipe } from '@/lib/useSwipe';
 import DailySummary from '@/components/DailySummary';
 import WhatIAte from '@/components/WhatIAte';
 import WaterLog from '@/components/WaterLog';
 import AddEntryModal from '@/components/AddEntryModal';
 import SearchScreen from '@/components/SearchScreen';
+import SuccessToast from '@/components/SuccessToast';
 import {
   getEntriesForDate,
   saveEntry,
@@ -24,7 +25,10 @@ import {
   toDateString,
   generateId,
 } from '@/lib/storage';
-import { EntryStatus, FoodEntry, FoodSearchResult, MealTag, WaterEntry } from '@/lib/types';
+import { EntryStatus, FoodEntry, FoodSearchResult, MealTag, RecurrenceMode, WaterEntry } from '@/lib/types';
+
+// Day-of-week name lookup — used to build repeat toast copy
+const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function HomePage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -44,6 +48,17 @@ export default function HomePage() {
   useEffect(() => {
     sessionStorage.setItem('planMode', String(planMode));
   }, [planMode]);
+
+  // Success toast — { heading, subtitle, repeatLine? } when visible, null when hidden.
+  // Auto-dismisses after 2.5s; fireToast always resets the timer so rapid saves only show one toast.
+  const [toast, setToast] = useState<{ heading: string; subtitle: string; repeatLine?: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function fireToast(heading: string, subtitle: string, repeatLine?: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ heading, subtitle, repeatLine });
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500);
+  }
 
   const dateStr = toDateString(currentDate);
   const todayStr = toDateString(new Date());
@@ -138,6 +153,57 @@ export default function HomePage() {
     loadDayData();
   }
 
+  // Called by AddEntryModal once after all saves complete — fires the success toast.
+  // mode='anchor' + dateCount=1 means a plain single-date add; other modes are from "Repeat this food".
+  // repeatLine, when present, is added as the toast's third line.
+  function handleAddDone({ itemName, status, repeatLine }: {
+    itemName: string; mode: RecurrenceMode; dateCount: number; status: EntryStatus; repeatLine?: string;
+  }) {
+    const name = itemName.toLowerCase();
+    // Heading reflects the primary action (adding to plate or plan)
+    let heading: string;
+    if (status === 'planned') {
+      heading = 'Added to meal plan!';
+    } else if (dateStr === todayStr) {
+      heading = "Added to today's plate!";
+    } else {
+      heading = "Added to your plate!";
+    }
+    fireToast(heading, name, repeatLine);
+  }
+
+  // Called when user confirms dates in RepeatSheet (↺ path).
+  // Generates one FoodEntry per date, applying the state rule:
+  //   - Future dates → always status:'planned', planOrigin:true
+  //   - Today or past → retains the source entry's status and planOrigin
+  function handleRepeatEntry(sourceEntry: FoodEntry, dates: string[], mode: RecurrenceMode) {
+    for (const date of dates) {
+      const isFutureDate = date > todayStr;
+      const entry: FoodEntry = {
+        ...sourceEntry,
+        id: generateId(),
+        date,
+        status: isFutureDate ? 'planned' : (sourceEntry.status ?? 'eaten'),
+        planOrigin: isFutureDate ? true : (sourceEntry.planOrigin ?? false),
+      };
+      saveEntry(entry);
+    }
+    loadDayData();
+    // Toast — describe what was repeated (mode now uses 'anchor'/'week' instead of 'today'/'daily')
+    const name = sourceEntry.ingredientName.toLowerCase();
+    if (mode === 'weekly' && dates.length > 0) {
+      const [y, m, d] = dates[0].split('-').map(Number);
+      const dow = new Date(y, m - 1, d).getDay();
+      fireToast(`Repeating every ${DOW_NAMES[dow]}!`, name);
+    } else if (mode === 'anchor') {
+      // Single date — anchor was "Today" or "Tomorrow"
+      fireToast('Repeated!', name);
+    } else {
+      // 'week' or 'custom' — multiple dates
+      fireToast(`Repeated for ${dates.length} days!`, name);
+    }
+  }
+
   // Called when user edits the water total directly from the summary
   function handleSetWater(ml: number) {
     setWaterForDate(dateStr, ml);
@@ -217,8 +283,10 @@ export default function HomePage() {
           onEdit={handleUpdateEntry}
           onConfirm={handleConfirmEntry}
           onUnconfirm={handleUnconfirmEntry}
+          onRepeat={handleRepeatEntry}
           isToday={isToday}
           isFuture={isFuture}
+          isPast={isPast}
           planMode={planMode}
           onAddItem={() => setShowAddModal(true)}
         />
@@ -284,10 +352,12 @@ export default function HomePage() {
       {showAddModal && (
         <AddEntryModal
           onSave={handleSaveEntry}
+          onSaveDone={handleAddDone}
           onClose={() => setShowAddModal(false)}
           planMode={planMode}
           isFuture={isFuture}
           isPast={isPast}
+          viewingDate={dateStr}
         />
       )}
 
@@ -300,6 +370,17 @@ export default function HomePage() {
           targetDate={toDateString(new Date())}
           planMode={planMode}
           onEnablePlanMode={() => setPlanMode(true)}
+        />
+      )}
+
+      {/* Success toast — shown after any add or repeat action; auto-dismisses after 2.5s */}
+      {toast && (
+        <SuccessToast
+          itemName=""
+          targetDate={todayStr}
+          heading={toast.heading}
+          subtitle={toast.subtitle}
+          repeatLine={toast.repeatLine}
         />
       )}
     </div>

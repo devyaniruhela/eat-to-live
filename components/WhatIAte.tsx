@@ -12,6 +12,9 @@ import { FoodEntry, MealTag } from '@/lib/types';
 import { calculateNutrition } from '@/lib/nutrition';
 import EmptyStatePrompt from '@/components/EmptyStatePrompt';
 import { useSwipe } from '@/lib/useSwipe';
+import RepeatSheet from '@/components/RepeatSheet';
+import { toDateString } from '@/lib/storage';
+import { RecurrenceMode } from '@/lib/types';
 
 interface WhatIAteProps {
   entries: FoodEntry[];
@@ -19,13 +22,28 @@ interface WhatIAteProps {
   onEdit: (id: string, newQuantity: number) => void;
   onConfirm: (id: string) => void;
   onUnconfirm: (id: string) => void;
+  onRepeat: (entry: FoodEntry, dates: string[], mode: RecurrenceMode) => void;
   isToday: boolean;
   isFuture: boolean;
+  // isPast is required so plan-related UI (On the menu, plan-mode placeholders)
+  // can be suppressed on past dates regardless of the global planMode toggle state.
+  isPast: boolean;
   planMode: boolean;
   onAddItem: () => void;
 }
 
 const MEAL_ORDER: (MealTag | null)[] = ['Breakfast', 'Lunch', 'Snack', 'Dinner', null];
+
+// Two-cards-with-plus icon — matches the "Repeat this food" CTA in AddEntryModal
+function RepeatIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="8" y="2" width="13" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8"/>
+      <rect x="3" y="6" width="13" height="16" rx="2.5" fill="var(--color-card)" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M9.5 14h4M11.5 12v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+    </svg>
+  );
+}
 
 // Small pencil icon — inline next to the food name
 function PencilIcon() {
@@ -67,10 +85,11 @@ interface EntryRowProps {
   onCancel: () => void;
   onStartEdit: () => void;
   onDelete: () => void;
+  onRepeat: () => void;
 }
 
 function EntryRow({
-  entry, isNew, isEditing, editQty, onEditQtyChange, onSave, onCancel, onStartEdit, onDelete,
+  entry, isNew, isEditing, editQty, onEditQtyChange, onSave, onCancel, onStartEdit, onDelete, onRepeat,
 }: EntryRowProps) {
   // Ref for the sliding content layer — manipulated directly during drag to avoid re-renders
   const rowRef = useRef<HTMLDivElement>(null);
@@ -169,13 +188,23 @@ function EntryRow({
               {entry.quantity_g}g &middot; {actual.calories} kcal &middot; {actual.protein}g protein
             </p>
           </div>
-          <button
-            onClick={onDelete}
-            className="text-stone-300 hover:text-rose-400 transition-colors text-sm leading-none mt-0.5 shrink-0"
-            aria-label={`Remove ${entry.ingredientName}`}
-          >
-            ×
-          </button>
+          {/* ↺ and × action buttons — repeat opens the "Eat this again" sheet */}
+          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+            <button
+              onClick={onRepeat}
+              className="text-stone-300 hover:text-stone-500 transition-colors"
+              aria-label={`Eat ${entry.ingredientName} again`}
+            >
+              <RepeatIcon />
+            </button>
+            <button
+              onClick={onDelete}
+              className="text-stone-300 hover:text-rose-400 transition-colors text-sm leading-none"
+              aria-label={`Remove ${entry.ingredientName}`}
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
       </div>{/* end sliding content layer */}
@@ -202,11 +231,12 @@ interface PlannedEntryRowProps {
   onDelete: () => void;
   onConfirm: () => void;
   onUnconfirm: () => void;
+  onRepeat: () => void;
 }
 
 function PlannedEntryRow({
   entry, isFuture, isScratching, isEditing, editQty, onEditQtyChange,
-  onSave, onCancel, onStartEdit, onDelete, onConfirm, onUnconfirm,
+  onSave, onCancel, onStartEdit, onDelete, onConfirm, onUnconfirm, onRepeat,
 }: PlannedEntryRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -274,11 +304,11 @@ function PlannedEntryRow({
           <path d="M2 4h12M6 4V2.5A.5.5 0 016.5 2h3a.5.5 0 01.5.5V4M13 4l-.867 8.664A1 1 0 0111.14 13.6H4.86a1 1 0 01-.993-.936L3 4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </div>
-      {/* Sliding content layer */}
+      {/* Sliding content layer — must match the "On the menu" section background, not the card white */}
       <div
         ref={rowRef}
         className={`relative py-2 ${isScratching ? 'animate-scratch' : ''}`}
-        style={{ backgroundColor: 'var(--color-card)' }}
+        style={{ backgroundColor: 'var(--color-planned-bg)' }}
         {...swipeHandlers}
       >
       {isEditing ? (
@@ -342,14 +372,23 @@ function PlannedEntryRow({
             </p>
           </div>
 
-          {/* Delete */}
-          <button
-            onClick={onDelete}
-            className="text-stone-300 hover:text-rose-400 transition-colors text-sm leading-none mt-0.5 shrink-0"
-            aria-label={`Remove ${entry.ingredientName}`}
-          >
-            ×
-          </button>
+          {/* Repeat + Delete */}
+          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+            <button
+              onClick={onRepeat}
+              className="text-stone-300 hover:text-stone-500 transition-colors"
+              aria-label={`Repeat ${entry.ingredientName}`}
+            >
+              <RepeatIcon />
+            </button>
+            <button
+              onClick={onDelete}
+              className="text-stone-300 hover:text-rose-400 transition-colors text-sm leading-none"
+              aria-label={`Remove ${entry.ingredientName}`}
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
 
@@ -368,18 +407,30 @@ function PlannedEntryRow({
 
 // ── WhatIAte ─────────────────────────────────────────────────────────────────
 
-export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUnconfirm, isToday: _isToday, isFuture, planMode, onAddItem }: WhatIAteProps) {
+export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUnconfirm, onRepeat, isToday: _isToday, isFuture, isPast, planMode, onAddItem }: WhatIAteProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState('');
   // Track recently confirmed IDs for pop-in animation in "What I Ate"
   const [recentlyConfirmedIds, setRecentlyConfirmedIds] = useState<Set<string>>(new Set());
   // Track recently scratched IDs for animate-scratch in "On the menu"
   const [recentlyScratchedIds, setRecentlyScratchedIds] = useState<Set<string>>(new Set());
+  // Entry being repeated — opens RepeatSheet when non-null
+  const [repeatEntry, setRepeatEntry] = useState<FoodEntry | null>(null);
+  const todayStr = toDateString(new Date());
 
   // Eaten entries — shown in "What I Ate"
   const eatenEntries = entries.filter((e) => e.status === 'eaten' || !e.status);
   // Plan-origin entries — shown in "On the menu" (both checked and unchecked)
   const planEntries = entries.filter((e) => e.planOrigin === true);
+
+  // Controls whether the "On the menu" section renders at all.
+  // planMode is global state that stays true when the user navigates to past dates,
+  // so every plan-related render must go through this single derived flag.
+  //
+  // Past date: show the section only if planned entries already exist (user can check
+  //            them off, but cannot add new ones — no CTA shown inside).
+  // Today / future: show the section whenever plan mode is on (empty state + CTA included).
+  const showPlanSection = planMode && (!isPast || planEntries.length > 0);
 
   function startEdit(entry: FoodEntry) {
     setEditingId(entry.id);
@@ -424,8 +475,8 @@ export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUncon
     items: planEntries.filter((e) => e.tag === tag),
   })).filter((g) => g.items.length > 0);
 
-  // If no eaten entries and plan mode is off, show the standard empty state
-  if (eatenEntries.length === 0 && !planMode) {
+  // Show the standard empty state when there's nothing eaten and no plan section to show
+  if (eatenEntries.length === 0 && !showPlanSection) {
     return (
       <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-8 text-center">
         <EmptyStatePrompt label="Start by adding what you ate" onTap={onAddItem} />
@@ -434,6 +485,19 @@ export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUncon
   }
 
   return (
+    <>
+    {/* RepeatSheet — rendered at root level so it can overlay the full screen */}
+    {repeatEntry && (
+      <RepeatSheet
+        entry={repeatEntry}
+        todayStr={todayStr}
+        onConfirm={(dates, mode) => {
+          onRepeat(repeatEntry, dates, mode);
+          setRepeatEntry(null);
+        }}
+        onClose={() => setRepeatEntry(null)}
+      />
+    )}
     <div className="space-y-4">
       {/* ── What I Ate ── */}
       {eatenEntries.length > 0 ? (
@@ -457,28 +521,33 @@ export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUncon
                     onCancel={cancelEdit}
                     onStartEdit={() => startEdit(entry)}
                     onDelete={() => onDelete(entry.id)}
+                    onRepeat={() => setRepeatEntry(entry)}
                   />
                 ))}
               </div>
             </div>
           ))}
         </div>
-      ) : planMode ? (
-        // Eaten section empty but plan mode is on — show a quiet placeholder
+      ) : showPlanSection ? (
+        // Eaten section empty but plan section is visible — show a quiet placeholder
         <div className="bg-card rounded-2xl shadow-sm border border-stone-200 p-5">
           <p className="text-xs text-stone-400 uppercase tracking-widest font-medium mb-3">What I Ate</p>
-          <p className="text-sm text-stone-300 text-center py-2">Nothing eaten yet today</p>
+          <p className="text-sm text-stone-300 text-center py-2">Nothing logged yet</p>
         </div>
       ) : null}
 
-      {/* ── On the menu ── (Plan Mode only) */}
-      {planMode && (
+      {/* ── On the menu ──
+           Shown when plan mode is ON and either:
+           - today / future (always, even if empty — "Plan a meal" CTA is the point)
+           - past date with existing planned entries (check-off only, no CTA) */}
+      {showPlanSection && (
         <div className="bg-planned rounded-2xl shadow-sm border border-stone-200 p-5 space-y-5">
           <p className="text-xs uppercase tracking-widest font-medium" style={{ color: 'var(--color-navy-mid)' }}>
             On the menu
           </p>
 
           {planEntries.length === 0 ? (
+            // Only reachable on today / future (showPlanSection hides past-date empty state)
             <EmptyStatePrompt label="Plan a meal" onTap={onAddItem} />
           ) : (
             groupedPlan.map(({ tag, items }) => (
@@ -502,6 +571,7 @@ export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUncon
                       onDelete={() => onDelete(entry.id)}
                       onConfirm={() => handleConfirm(entry.id)}
                       onUnconfirm={() => handleUnconfirm(entry.id)}
+                      onRepeat={() => setRepeatEntry(entry)}
                     />
                   ))}
                 </div>
@@ -511,5 +581,6 @@ export default function WhatIAte({ entries, onDelete, onEdit, onConfirm, onUncon
         </div>
       )}
     </div>
+    </>
   );
 }

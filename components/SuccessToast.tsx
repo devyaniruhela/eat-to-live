@@ -1,16 +1,20 @@
-// Success toast shown after adding an item to the plate.
-// Displays a plate illustration with a checkmark badge, the item name,
-// and a date-aware subtitle:
-//   today/yesterday → "Added to today's plate!" / item name
-//   other           → "Added to your plate!" / "<item name> on 14 March"
+// Success toast shown after adding or repeating an item.
+// Default mode: date-aware plate message ("Added to today's plate!" etc.)
+// Override mode: pass heading + subtitle directly for repeat confirmations.
+// repeatLine, when present, shows as a third line describing the repeat schedule.
 // Auto-dismiss is handled by the parent via state — this component is purely presentational.
 
 import { toDateString } from '@/lib/storage';
 
 interface SuccessToastProps {
   itemName: string;
-  // YYYY-MM-DD of the date the item was saved to
+  // YYYY-MM-DD of the date the item was saved to — only used when heading is not provided
   targetDate: string;
+  // Optional overrides — when provided, skip the date-aware copy entirely
+  heading?: string;
+  subtitle?: string;
+  // Optional third line describing the repeat schedule (e.g. "Also saved for 6 more days")
+  repeatLine?: string;
 }
 
 // Returns the header message and item subtitle based on the target date.
@@ -36,8 +40,11 @@ function getToastContent(itemName: string, targetDate: string): { heading: strin
   return { heading: "Added to your plate!", subtitle: `${name} on ${dateLabel}` };
 }
 
-export default function SuccessToast({ itemName, targetDate }: SuccessToastProps) {
-  const { heading, subtitle } = getToastContent(itemName, targetDate);
+export default function SuccessToast({ itemName, targetDate, heading: headingProp, subtitle: subtitleProp, repeatLine }: SuccessToastProps) {
+  // Use overrides when provided (repeat flows); fall back to date-aware copy (add flows)
+  const { heading, subtitle } = headingProp && subtitleProp
+    ? { heading: headingProp, subtitle: subtitleProp }
+    : getToastContent(itemName, targetDate);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-8 pointer-events-none">
@@ -64,12 +71,19 @@ export default function SuccessToast({ itemName, targetDate }: SuccessToastProps
           <path d="M53 57 L57 61 L64 51" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
         </svg>
 
-        {/* Message */}
+        {/* Message — hierarchy: action → repeat context → food name */}
         <div className="text-center">
           <p className="text-sm font-semibold text-stone-800 leading-snug">
             {heading}
           </p>
-          <p className="text-xs text-stone-400 mt-1 capitalize">
+          {/* Repeat line comes before the food name — it's the meaningful new info */}
+          {repeatLine && (
+            <p className="text-xs mt-1" style={{ color: 'var(--color-navy-mid)' }}>
+              {repeatLine}
+            </p>
+          )}
+          {/* Food name last — smallest, grey; the "for what" that closes the thought */}
+          <p className={`text-xs capitalize text-stone-400 ${repeatLine ? 'mt-0.5' : 'mt-1'}`}>
             {subtitle}
           </p>
         </div>
