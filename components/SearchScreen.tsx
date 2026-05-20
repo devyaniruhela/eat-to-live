@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { EntryStatus, FoodSearchResult, MealTag } from '@/lib/types';
 import { MICRONUTRIENT_LABELS } from '@/lib/nutrition';
-import { getCustomFoods, customFoodToSearchResult } from '@/lib/storage';
+import { useFoodSearch } from '@/lib/useFoodSearch';
 import AddEntryModal from '@/components/AddEntryModal';
 import SuccessToast from '@/components/SuccessToast';
 import CustomItemModal from '@/components/CustomItemModal';
@@ -25,10 +25,7 @@ interface SearchScreenProps {
 
 export default function SearchScreen({ onClose, onSave, targetDate, planMode = false, onEnablePlanMode }: SearchScreenProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selected, setSelected] = useState<FoodSearchResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   // null = no modal open; 'plate' = Add to plate flow; 'plan' = Add to plan flow (with date picker)
   const [modalMode, setModalMode] = useState<'plate' | 'plan' | null>(null);
   const [showCustomModal, setShowCustomModal] = useState(false);
@@ -38,10 +35,10 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
   const [saveTargetDate, setSaveTargetDate] = useState(targetDate);
 
   const searchRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // In-memory cache: same pattern as AddEntryModal — avoids re-fetching within a session
-  const cache = useRef<Map<string, FoodSearchResult[]>>(new Map());
+
+  // Search pipeline — debounce, cache, fetch, custom-food prepend
+  const { results, loading, error } = useFoodSearch(query, selected?.name ?? null);
 
   // Auto-focus search input on open
   useEffect(() => {
@@ -53,62 +50,14 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
     return () => { if (successTimer.current) clearTimeout(successTimer.current); };
   }, []);
 
-  // Debounced search — 350ms after typing stops, same as AddEntryModal
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    // User just selected a result — query matches selected name, don't re-search
-    if (selected && query === selected.name) {
-      setResults([]);
-      return;
-    }
-
-    if (!query || query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-
-    debounceRef.current = setTimeout(() => fetchResults(query), 350);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, selected]);
-
-  async function fetchResults(q: string) {
-    const key = q.trim().toLowerCase();
-
-    // Prepend matching custom foods before API results — checked first in the pipeline
-    const customMatches = getCustomFoods()
-      .filter((cf) => cf.name.toLowerCase().includes(key))
-      .map(customFoodToSearchResult);
-
-    if (cache.current.has(key)) {
-      setResults([...customMatches, ...cache.current.get(key)!]);
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/food-search?query=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      cache.current.set(key, data.results);
-      setResults([...customMatches, ...data.results]);
-    } catch {
-      setError('Could not fetch results. Check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function handleSelect(food: FoodSearchResult) {
     setSelected(food);
-    setResults([]);
     setQuery(food.name);
   }
 
   function handleClear() {
     setSelected(null);
     setQuery('');
-    setResults([]);
     searchRef.current?.focus();
   }
 
@@ -119,7 +68,7 @@ export default function SearchScreen({ onClose, onSave, targetDate, planMode = f
     setModalMode(null);
     setSelected(null);
     setQuery('');
-    setResults([]);
+    // results clear automatically via useFoodSearch when query + selected are reset above
     setSaveTargetDate(savedToDate ?? targetDate);
     setSuccessItem(food.name);
     if (successTimer.current) clearTimeout(successTimer.current);

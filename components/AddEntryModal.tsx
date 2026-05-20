@@ -9,7 +9,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { EntryStatus, FoodSearchResult, MealTag, RecurrenceMode, RepeatContext } from '@/lib/types';
 import { calculateNutrition, MICRONUTRIENT_LABELS } from '@/lib/nutrition';
-import { getRecentFoods, toDateString, getCustomFoods, customFoodToSearchResult } from '@/lib/storage';
+import { getRecentFoods, toDateString } from '@/lib/storage';
+import { useFoodSearch } from '@/lib/useFoodSearch';
 import CustomItemModal from '@/components/CustomItemModal';
 import RecurrencePicker from '@/components/RecurrencePicker';
 import { getRepeatConfig, resolveTargetDates, dowName } from '@/lib/recurrence';
@@ -73,12 +74,9 @@ export default function AddEntryModal({
 
   // ─── State ────────────────────────────────────────────────────────────────────
   const [query, setQuery] = useState(initialFood?.name ?? '');
-  const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selected, setSelected] = useState<FoodSearchResult | null>(initialFood ?? null);
   const [quantity, setQuantity] = useState('');
   const [tag, setTag] = useState<MealTag | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showMicros, setShowMicros] = useState(false);
   // "Mark as eaten" checkbox — only shown in Plan Mode on today (not future dates or date picker flow).
   // Unchecked = save as planned; checked = save as eaten directly.
@@ -100,10 +98,9 @@ export default function AddEntryModal({
   );
   const searchRef = useRef<HTMLInputElement>(null);
   const quantityRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // In-memory cache: stores results for queries already fetched this session.
-  // Key = lowercased query string, Value = results array.
-  const cache = useRef<Map<string, FoodSearchResult[]>>(new Map());
+
+  // Search pipeline — debounce, cache, fetch, custom-food prepend
+  const { results, loading, error } = useFoodSearch(query, selected?.name ?? null);
 
   // Auto-focus: quantity input when food is pre-selected, otherwise search input
   useEffect(() => {
@@ -114,62 +111,10 @@ export default function AddEntryModal({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounce search — wait 350ms after typing stops before calling the API.
-  // If the query matches the already-selected food's name, skip searching —
-  // this is what happens right after the user picks a result from the dropdown.
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (selected && query === selected.name) {
-      setResults([]);
-      return;
-    }
-
-    if (!query || query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-
-    debounceRef.current = setTimeout(() => {
-      fetchResults(query);
-    }, 350);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query, selected]);
-
-  async function fetchResults(q: string) {
-    const key = q.trim().toLowerCase();
-
-    // Custom foods always checked first — no API call needed for them
-    const customMatches = getCustomFoods()
-      .filter((cf) => cf.name.toLowerCase().includes(key))
-      .map(customFoodToSearchResult);
-
-    if (cache.current.has(key)) {
-      setResults([...customMatches, ...cache.current.get(key)!]);
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/food-search?query=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      cache.current.set(key, data.results);
-      setResults([...customMatches, ...data.results]);
-    } catch {
-      setError('Could not fetch results. Check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function handleSelect(food: FoodSearchResult) {
-    // Order matters: set selected first so the effect's guard condition is true when query updates
+    // Set selected before updating query — useFoodSearch suppresses the search
+    // when query === selectedName, so results clear cleanly on the next effect tick.
     setSelected(food);
-    setResults([]);
     setQuery(food.name);
     setShowMicros(false);
   }

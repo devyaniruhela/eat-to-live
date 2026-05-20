@@ -304,13 +304,17 @@ function PlannedEntryRow({
           <path d="M2 4h12M6 4V2.5A.5.5 0 016.5 2h3a.5.5 0 01.5.5V4M13 4l-.867 8.664A1 1 0 0111.14 13.6H4.86a1 1 0 01-.993-.936L3 4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </div>
-      {/* Sliding content layer — must match the "On the menu" section background, not the card white */}
+      {/* Sliding content layer — must match the "On the menu" section background, not the card white.
+          animate-scratch is applied to an inner wrapper, NOT this div, so the background colour stays
+          fully opaque during the fade — otherwise the red delete panel bleeds through. */}
       <div
         ref={rowRef}
-        className={`relative py-2 ${isScratching ? 'animate-scratch' : ''}`}
+        className="relative py-2"
         style={{ backgroundColor: 'var(--color-planned-bg)' }}
         {...swipeHandlers}
       >
+      {/* Inner wrapper fades for scratch animation; outer wrapper keeps background solid */}
+      <div className={isScratching ? 'animate-scratch' : ''}>
       {isEditing ? (
         <div className="pl-7">
           <p className={`text-sm font-medium capitalize mb-2 ${isChecked ? 'text-stone-400 line-through' : 'text-stone-700'}`}>
@@ -400,6 +404,7 @@ function PlannedEntryRow({
           Come back on {formatEntryDate(entry.date)} to mark this as eaten
         </div>
       )}
+      </div>{/* end animate-scratch inner wrapper */}
       </div>{/* end sliding content layer */}
     </div>
   );
