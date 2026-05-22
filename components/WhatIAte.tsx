@@ -117,11 +117,12 @@ function EntryRow({
     setTimeout(onDelete, 180);
   }
 
+  // Swipe-to-delete is temporarily disabled — uncomment the three lines below to re-enable.
   const swipeHandlers = useSwipe({
-    onSwipeLeft: handleSwipeDelete,
+    // onSwipeLeft: handleSwipeDelete,
     stopPropagation: true,
-    onSwipeProgress: handleDragProgress,
-    onSwipeCancel: handleDragCancel,
+    // onSwipeProgress: handleDragProgress,
+    // onSwipeCancel: handleDragCancel,
     hapticMs: 80,
   });
   const actual = calculateNutrition(entry.nutrition, entry.quantity_g);
@@ -259,11 +260,12 @@ function PlannedEntryRow({
     setTimeout(onDelete, 180);
   }
 
+  // Swipe-to-delete is temporarily disabled — uncomment the three lines below to re-enable.
   const swipeHandlers = useSwipe({
-    onSwipeLeft: handleSwipeDelete,
+    // onSwipeLeft: handleSwipeDelete,
     stopPropagation: true,
-    onSwipeProgress: handleDragProgress,
-    onSwipeCancel: handleDragCancel,
+    // onSwipeProgress: handleDragProgress,
+    // onSwipeCancel: handleDragCancel,
     hapticMs: 80,
   });
   const actual = calculateNutrition(entry.nutrition, entry.quantity_g);

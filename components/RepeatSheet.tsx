@@ -71,17 +71,24 @@ export default function RepeatSheet({ entry, todayStr, onConfirm, onClose }: Rep
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — stopPropagation on touch events prevents the page-level date-swipe from
+          firing when the user interacts with the sheet (RepeatSheet renders inside the page DOM) */}
       <div
         className="fixed inset-0 z-40"
         style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
         onClick={onClose}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
       />
 
       {/* Sheet */}
       <div
         className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl px-5 pt-5 pb-10 max-w-md mx-auto"
         style={{ backgroundColor: 'var(--color-card)', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div className="w-10 h-1 rounded-full bg-stone-200 mx-auto mb-5" />

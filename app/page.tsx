@@ -174,17 +174,25 @@ export default function HomePage() {
 
   // Called when user confirms dates in RepeatSheet (↺ path).
   // Generates one FoodEntry per date, applying the state rule:
-  //   - Future dates → always status:'planned', planOrigin:true
-  //   - Today or past → retains the source entry's status and planOrigin
+  //   - Future → always status:'planned', planOrigin:true
+  //   - Today + source was plan-origin → status:'planned', planOrigin:true (fresh unchecked plan item)
+  //   - Today + source was plain eaten → status:'eaten', planOrigin:false (lands in What I Ate)
+  //   - Past → retains the source entry's status and planOrigin
   function handleRepeatEntry(sourceEntry: FoodEntry, dates: string[], mode: RecurrenceMode) {
+    const sourcePlanOrigin = sourceEntry.planOrigin ?? false;
     for (const date of dates) {
       const isFutureDate = date > todayStr;
+      const isTodayDate = date === todayStr;
       const entry: FoodEntry = {
         ...sourceEntry,
         id: generateId(),
         date,
-        status: isFutureDate ? 'planned' : (sourceEntry.status ?? 'eaten'),
-        planOrigin: isFutureDate ? true : (sourceEntry.planOrigin ?? false),
+        status: isFutureDate ? 'planned'
+              : (isTodayDate && sourcePlanOrigin) ? 'planned'
+              : (sourceEntry.status ?? 'eaten'),
+        planOrigin: isFutureDate ? true
+                  : (isTodayDate && sourcePlanOrigin) ? true
+                  : sourcePlanOrigin,
       };
       saveEntry(entry);
     }
@@ -232,9 +240,15 @@ export default function HomePage() {
     setWaterMl((prev) => prev + ml);
   }
 
-  // Swipe left = next day, swipe right = prev day — same as the arrow buttons
+  // Swipe left = next day, swipe right = prev day — same as the arrow buttons.
+  // Disabled when any modal/sheet is open so swipes inside those overlays don't change the date.
   // 60ms haptic pulse on date swipe — lighter than delete (navigation, not destruction)
-  const swipeHandlers = useSwipe({ onSwipeLeft: goToNextDay, onSwipeRight: goToPrevDay, hapticMs: 60 });
+  const anyModalOpen = showAddModal || showSearch;
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: anyModalOpen ? undefined : goToNextDay,
+    onSwipeRight: anyModalOpen ? undefined : goToPrevDay,
+    hapticMs: 60,
+  });
 
   return (
     <div className={`max-w-md mx-auto px-4 pb-36 ${isFuture ? 'future-plan-tint' : ''}`} {...swipeHandlers}>
